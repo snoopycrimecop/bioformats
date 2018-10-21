@@ -819,15 +819,6 @@ public class MetamorphReader extends BaseTiffReader {
     String instrumentID = MetadataTools.createLSID("Instrument", 0);
     String detectorID = MetadataTools.createLSID("Detector", 0, 0);
 
-    // METADATA-ONLY
-    if (isHCS) {
-      store.setPlateID(MetadataTools.createLSID("Plate", 0), 0);
-      store.setPlateRows(new PositiveInteger(rows), 0);
-      store.setPlateColumns(new PositiveInteger(cols), 0);
-      store.setPlateRowNamingConvention(NamingConvention.LETTER, 0);
-      store.setPlateColumnNamingConvention(NamingConvention.NUMBER, 0);
-    }
-
     store.setInstrumentID(instrumentID, 0);
     store.setDetectorID(detectorID, 0, 0);
     store.setDetectorType(getDetectorType("Other"), 0, 0);
