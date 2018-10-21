@@ -64,16 +64,7 @@
       <version>${ome-poi.version}</version>
     </dependency>
     <dependency>
-<<<<<<< HEAD
-      <groupId>${project.groupId}</groupId>
-      <artifactId>formats-bsd</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>ome</groupId><!-- skip bump -->
-=======
-      <groupId>ome</groupId>
->>>>>>> v5.9.2
       <artifactId>jxrlib-all</artifactId>
       <version>${jxrlib.version}</version>
     </dependency>
