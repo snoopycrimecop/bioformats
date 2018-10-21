@@ -191,7 +191,7 @@ public class DicomReader extends FormatReader {
     stream.seek(0);
 
     try {
-      int tag = getNextTag(stream);
+      int tag = getNextTag(stream, false);
       return TYPES.containsKey(tag);
     }
     catch (NullPointerException e) { }
@@ -1072,11 +1072,13 @@ public class DicomReader extends FormatReader {
       case US:
         if (elementLength == 2) value = Integer.toString(in.readShort());
         else {
-          value = "";
+          StringBuilder sb = new StringBuilder();
           int n = elementLength / 2;
           for (int i=0; i<n; i++) {
-            value += Integer.toString(in.readShort()) + " ";
+            sb.append(in.readShort());
+            sb.append(" ");
           }
+          value = sb.toString();
         }
         break;
       case IMPLICIT_VR:
@@ -1182,19 +1184,27 @@ public class DicomReader extends FormatReader {
   private int getNextTag(RandomAccessInputStream stream)
     throws FormatException, IOException
   {
+    return getNextTag(stream, true);
+  }
+
+  private int getNextTag(RandomAccessInputStream stream, boolean setMetadata)
+    throws FormatException, IOException
+  {
     long fp = stream.getFilePointer();
     if (fp >= stream.length() - 2) {
       return 0;
     }
     int groupWord = stream.readShort() & 0xffff;
     if (groupWord == 0x0800 && bigEndianTransferSyntax) {
-      core.get(0).littleEndian = false;
+      if (setMetadata) {
+        core.get(0).littleEndian = false;
+      }
       groupWord = 0x0008;
       stream.order(false);
     }
     else if (groupWord == 0xfeff || groupWord == 0xfffe) {
       stream.skipBytes(6);
-      return getNextTag(stream);
+      return getNextTag(stream, setMetadata);
     }
 
     int elementWord = stream.readShort();
@@ -1203,8 +1213,11 @@ public class DicomReader extends FormatReader {
     elementLength = getLength(stream, tag);
     if (elementLength > stream.length()) {
       stream.seek(fp);
-      core.get(0).littleEndian = !core.get(0).littleEndian;
-      stream.order(core.get(0).littleEndian);
+
+      stream.order(!core.get(0).littleEndian);
+      if (setMetadata) {
+        core.get(0).littleEndian = !core.get(0).littleEndian;
+      }
 
       groupWord = stream.readShort() & 0xffff;
       elementWord = stream.readShort();

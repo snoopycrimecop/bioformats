@@ -52,6 +52,9 @@ import ome.units.quantity.Length;
 import ome.units.quantity.Time;
 import ome.units.UNITS;
 
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+
 /**
  * BaseZeissReader contains common functionality required by
  * readers for Zeiss AxioVision formats.
@@ -69,6 +72,7 @@ public abstract class BaseZeissReader extends FormatReader {
   protected int[] offsets;
   protected int[][] coordinates;
 
+  protected transient Timestamp acquisitionDate;
   protected Map<Integer, String> timestamps, exposureTime;
   protected int cIndex = -1;
   protected boolean isJPEG, isZlib;
@@ -303,13 +307,9 @@ public abstract class BaseZeissReader extends FormatReader {
       long firstStamp = 0;
       if (timestamps.size() > 0) {
         String timestamp = timestamps.get(0);
-        firstStamp = parseTimestamp(timestamp);
-        firstStamp /= 1600;
-        int epoch = timestamps.size() == 1 ? DateTools.ALT_ZVI : DateTools.ZVI;
-        String date = DateTools.convertDate(firstStamp, epoch);
-        if (date != null) {
-          store.setImageAcquisitionDate(new Timestamp(date), i);
-        }
+        store.setImageAcquisitionDate(new Timestamp(timestamp), i);
+      } else if (acquisitionDate != null) {
+        store.setImageAcquisitionDate(acquisitionDate, i);
       }
     }
 
@@ -384,7 +384,10 @@ public abstract class BaseZeissReader extends FormatReader {
           store.setPixelsPhysicalSizeZ(sizeZ, i);
         }
 
-        long firstStamp = parseTimestamp(timestamps.get(0));
+        Timestamp firstStamp = null;
+        if (timestamps.get(0) != null) {
+          firstStamp = new Timestamp(timestamps.get(0));
+        }
 
         for (int plane=0; plane<getImageCount(); plane++) {
           int[] zct = getZCTCoords(plane);
@@ -404,11 +407,11 @@ public abstract class BaseZeissReader extends FormatReader {
 
           int posIndex = i * getImageCount() + plane;
 
-          if (posIndex < timestamps.size()) {
-            String timestamp = timestamps.get(posIndex);
-            long stamp = parseTimestamp(timestamp);
-            stamp -= firstStamp;
-            store.setPlaneDeltaT(new Time((double) stamp / 1600000, UNITS.SECOND), i, plane);
+          if (posIndex < timestamps.size() && firstStamp != null) {
+            Timestamp timestamp = new Timestamp(timestamps.get(posIndex));
+            long difference = timestamp.asInstant().getMillis() - firstStamp.asInstant().getMillis();
+            double delta = (double) difference;
+            store.setPlaneDeltaT(new Time(delta, UNITS.MILLISECOND), i, plane);
           }
 
           if (stageX.get(posIndex) != null) {
@@ -757,6 +760,7 @@ public abstract class BaseZeissReader extends FormatReader {
   public void close(boolean fileOnly) throws IOException {
     super.close(fileOnly);
     if (!fileOnly) {
+      acquisitionDate = null;
       timestamps = exposureTime = null;
       offsets = null;
       coordinates = null;
@@ -827,7 +831,17 @@ public abstract class BaseZeissReader extends FormatReader {
         }
 
         if (cIndex != -1) key += " " + cIndex;
-        addGlobalMeta(key, value);
+        if (!key.startsWith("Camera Acquisition Time") && !key.startsWith("ImageRelativeTime")) {
+          String metavalue = value;
+          if (key.endsWith("Date")) {
+            try {
+              metavalue = DateTools.convertDate(parseTimestamp(value), DateTools.UNIX, DateTools.ISO8601_FORMAT_MS);
+            }
+            catch (Exception e) {
+            }
+          }
+          addGlobalMeta(key, metavalue);
+        }
 
         if (key.startsWith("ImageTile") && !(store instanceof DummyMetadata)) {
           if (!tiles.containsKey(new Integer(value))) {
@@ -999,14 +1013,22 @@ public abstract class BaseZeissReader extends FormatReader {
           imageDescription = value;
         }
         else if (key.startsWith("Acquisition Date")) {
-          if (timepoint > 0) {
-            timestamps.put(timepoint - 1, value);
-            addGlobalMetaList("Timestamp", value);
-          }
-          else {
-            timestamps.put(timepoint, value);
+          acquisitionDate = new Timestamp(DateTools.convertDate(parseTimestamp(value), DateTools.UNIX, DateTools.ISO8601_FORMAT_MS));
+        }
+        else if (image >= 0 && key.startsWith("Camera Acquisition Time")) { // Note Double variant for TIFF XML.
+          String date = DateTools.convertDate(parseTimestamp(value), DateTools.UNIX, DateTools.ISO8601_FORMAT_MS);
+          addSeriesMetaList(key, date);
+          if (timepoint != 0) { // First timepoint is duplicated for some reason.
+            timestamps.put(timepoint - 1, date);
+          } else {
+            timestamps.put(timepoint, date);
           }
           timepoint++;
+        }
+        else if (image >= 0 && key.startsWith("ImageRelativeTime")) {
+          Time time = new Time(Double.parseDouble(value), UNITS.DAY);
+          String timestr = time.value().toString() + " " + time.unit().getSymbol();
+          addSeriesMetaList(key, timestr);
         }
       }
       catch (NumberFormatException e) { }
@@ -1044,26 +1066,33 @@ public abstract class BaseZeissReader extends FormatReader {
    * @return a timestamp
    */
   private long parseTimestamp(String s) {
-    long stamp = 0;
-    try {
-      stamp = Long.parseLong(s);
-    }
-    catch (NumberFormatException exc) {
-      try {
-        stamp = Double.doubleToLongBits(Double.parseDouble(s));
-      }
-      catch (Exception e) {
-        if (s != null) {
-          stamp = DateTools.getTime(s, "M/d/y h:mm:ss aa");
-          if (stamp < 0) {
-            stamp = DateTools.getTime(s, "d/M/y H:mm:ss");
-          }
-          stamp += DateTools.ZVI_EPOCH;
-          stamp *= 1600;
+    try
+      {
+        double dstamp = Double.parseDouble(s); // Time in days since the ZVI epoch
+        DateTime epoch = new DateTime(1900, 1, 1, 0, 0, DateTimeZone.UTC); // 1900-01-01 00:00:00
+
+        long millisInDay = 24L * 60L * 60L * 1000L;
+        int days = (int) Math.floor(dstamp);
+        int millis = (int)((dstamp - days) * millisInDay + 0.5);
+
+        days -= 1; // We start on day 1
+        if (days > 60) { // Date prior to 1900-03-01
+          days -= 1; // 1900-02-29 is considered a valid date by Excel; correct for this.
         }
+
+        DateTime dtstamp = epoch.plusDays(days);
+        dtstamp = dtstamp.plusMillis(millis);
+
+        return dtstamp.getMillis();
       }
-    }
-    return stamp;
+    catch (NumberFormatException e)
+      {
+        // Not a Double; one file (BY4741NQ2.zvi) contains a string in
+        // place of the float64 defined in the spec, so try parsing
+        // using US date format.  May be a historical AxioVision bug.
+        String us_format = "MM/dd/yyyy hh:mm:ss aa";
+        return DateTools.getTime(s, us_format, null);
+      }
   }
 
   public enum Context { MAIN, SCALING, PLANE }
@@ -1122,6 +1151,11 @@ public abstract class BaseZeissReader extends FormatReader {
     public String getKey()
     {
       return getKey(keyid);
+    }
+
+    public int getKeyID()
+    {
+      return keyid;
     }
 
     public void setValue(String value)
@@ -1232,7 +1266,7 @@ public abstract class BaseZeissReader extends FormatReader {
         case 1002: return "Code";
         case 1003: return "Source";
         case 1004: return "Message";
-        case 1025: return "Acquisition Date"; // Also "Camera Acquisition Time" in latest AxioVision, which more closely matches its per-plane meaning. and "CameraImageAcquisitionTime" in the spec
+        case 1025: return "Camera Acquisition Time"; // Also "Acquisition Date" in older AxioVision versions, and "CameraImageAcquisitionTime" in the spec.  Double for ZVI, nonportable date string for TIFF.
         case 1026: return "8-bit Acquisition";
         case 1027: return "Camera Bit Depth";
         case 1029: return "MonoReferenceLow";
@@ -1248,7 +1282,7 @@ public abstract class BaseZeissReader extends FormatReader {
         case 1044: return "CameraTriggerSignalType";
         case 1045: return "CameraTriggerEnable";
         case 1046: return "GrabberTimeout";
-        case 1047: return "tag_ID_1047"; // Undocumented in spec.
+        case 1047: return "Camera Acquisition Time"; // Undocumented in spec., but appears to be 1025 as string double value.  Avoids the need for fragile date parsing.
         case 1281: return "MultiChannelEnabled";
         case 1282: return "MultiChannel Color"; // False colour for the channel; "Multichannel Colour" in spec.
         case 1283: return "MultiChannel Weight"; // False colour weighting; "Multichannel Weight" in spec.
@@ -2086,36 +2120,79 @@ public abstract class BaseZeissReader extends FormatReader {
 
     @Override
     public String toString() {
-      String s = new String();
-      s += "  SHAPE: " + id;
-      s += "    Type=" + type;
-      s += "    Unknown1=" + Long.toHexString(unknown1&0xFFFFFFFFL) + " Unknown2=" + Long.toHexString(unknown2&0xFFFFFFFFL) + " Unknown3=" + Long.toHexString(unknown3&0xFFFFFFFFL) + "\n";
-      s += "    Bbox=" + x1 + "," + y1 + "  " + x2 + "," + y2 + "\n";
-      s += "    Unknown4=" + Long.toHexString(unknown4&0xFFFFFFFFL) + " Unknown5=" + Long.toHexString(unknown5&0xFFFFFFFFL) + " Unknown6=" + Long.toHexString(unknown6&0xFFFFFFFFL) + " Unknown7=" + Long.toHexString(unknown7&0xFFFFFFFFL) + "\n";
-      s += "    Unknown8=" + Long.toHexString(unknown8&0xFFFFFFFFL) + "\n";
-      s += "    Unknown10=" + Long.toHexString(unknown10&0xFFFFFFFFL) + " Unknown11=" + Long.toHexString(unknown11&0xFFFFFFFFL) + " Unknown12=" + Long.toHexString(unknown12&0xFFFFFFFFL) + "\n";
-      s += "    Unknown13=" + Long.toHexString(unknown13&0xFFFFFFFFL) + " Unknown14=" + Long.toHexString(unknown14&0xFFFFFFFFL) + " Unknown15=" + Long.toHexString(unknown15&0xFFFFFFFFL) + " Unknown16=" + Long.toHexString(unknown16&0xFFFFFFFFL) + "\n";
-      s += "    Unknown17=" + Long.toHexString(unknown17&0xFFFFFFFFL) + " Unknown18=" + Long.toHexString(unknown18&0xFFFFFFFFL) + " Unknown19=" + Long.toHexString(unknown19&0xFFFFFFFFL) + "\n";
-      s += "    fillColour=" + Long.toHexString(fillColour&0xFFFFFFFFL)
-          + " textColour=" + Long.toHexString((textColour&0xFFFFFFFFL))
-          + " drawColour=" + Long.toHexString((drawColour&0xFFFFFFFFL)) + "\n";
-      s += "    drawStyle=" + drawStyle
-          +  " fillStyle=" + fillStyle
-          +  " lineEndStyle=" + lineEndStyle
-          +  " lineEndSize=" + lineEndSize
-          +  " lineEndPositions=" + lineEndPositions + "\n";
-      s += "displayTag=" + displayTag + "\n";
-      s += "  fontName=" + fontName + " size="+fontSize + " weight="+fontWeight + " bold="+bold + " italic=" + italic + " underline="+underline + " strikeout="+strikeout + " alignment=" + textAlignment + " charset=" + charset + "\n";
-      s += "  name: " + name + "\n";
-      s += "  text: " + text + "\n";
+      StringBuilder s = new StringBuilder("  SHAPE: ");
+      s.append(id);
+      appendValue(s, "    Type=", type);
+      appendHexValue(s, "    Unknown1=", unknown1);
+      appendHexValue(s, " Unknown2=", unknown2);
+      appendHexValue(s, " Unknown3=", unknown3);
+      s.append("\n    Bbox=");
+      s.append(x1);
+      s.append(",");
+      s.append(y1);
+      s.append("  ");
+      s.append(x2);
+      s.append(",");
+      s.append(y2);
+      appendHexValue(s, "\n    Unknown4=", unknown4);
+      appendHexValue(s, " Unknown5=", unknown5);
+      appendHexValue(s, " Unknown6=", unknown6);
+      appendHexValue(s, " Unknown7=", unknown7);
+      appendHexValue(s, "\n    Unknown8=", unknown8);
+      appendHexValue(s, "\n    Unknown10=", unknown10);
+      appendHexValue(s, " Unknown11=", unknown11);
+      appendHexValue(s, " Unknown12=", unknown12);
+      appendHexValue(s, "\n    Unknown13=", unknown13);
+      appendHexValue(s, " Unknown14=", unknown14);
+      appendHexValue(s, " Unknown15=", unknown15);
+      appendHexValue(s, " Unknown16=", unknown16);
+      appendHexValue(s, "\n    Unknown17=", unknown17);
+      appendHexValue(s, " Unknown18=", unknown18);
+      appendHexValue(s, " Unknown19=", unknown19);
+      appendHexValue(s, "\n    fillColour=", fillColour);
+      appendHexValue(s, " textColour=", textColour);
+      appendHexValue(s, " drawColour=", drawColour);
+      appendValue(s, "\n    drawStyle=", drawStyle);
+      appendValue(s, " fillStyle=", fillStyle);
+      appendValue(s, " lineEndStyle=", lineEndStyle);
+      appendValue(s, " lineEndSize=", lineEndSize);
+      appendValue(s, " lineEndPositions=", lineEndPositions);
+      appendValue(s, "\ndisplayTag=", displayTag);
+      appendValue(s, "\n  fontName=", fontName);
+      appendValue(s, " size=", fontSize);
+      appendValue(s, " weight=", fontWeight);
+      appendValue(s, " bold=", bold);
+      appendValue(s, " italic=", italic);
+      appendValue(s, " underline=", underline);
+      appendValue(s, " strikeout=", strikeout);
+      appendValue(s, " alignment=", textAlignment);
+      appendValue(s, " charset=", charset);
+      appendValue(s, "\n  name: ", name);
+      appendValue(s, "\n  text: ", text);
       //s += "  Zpos: " + zpos;
-      s += "  tagID: " + tagID.getKey() + "\n";
-      s += "  handleSize:" + handleSize + "\n";
-      s += "  pointCount:" + pointCount + "\n    ";
-      for (double point : points)
-        s+=point + ", ";
-      s+= "\n";
-      return s;
+      appendValue(s, "\n  tagID: ", tagID.getKey());
+      appendValue(s, "\n  handleSize:", handleSize);
+      appendValue(s, "\n  pointCount:", pointCount);
+      s.append("\n    ");
+      for (double point : points) {
+        s.append(point);
+        s.append(", ");
+      }
+      s.append("\n");
+      return s.toString();
+    }
+
+    private void appendHexValue(StringBuilder s, String key, int i) {
+      appendValue(s, key, formatHex(i));
+    }
+
+    private void appendValue(StringBuilder s, String key, Object value) {
+      s.append(key);
+      s.append(value);
+    }
+
+    private String formatHex(int i) {
+      return Long.toHexString(i & 0xFFFFFFFFL);
     }
   }
 
@@ -2132,15 +2209,18 @@ public abstract class BaseZeissReader extends FormatReader {
 
     @Override
     public String toString() {
-      String s = new String();
-      s += "LAYER: " + key;
-      if (name != null)
-        s += " (" + name + ")";
-      s+= "\n";
-      for (Shape shape : shapes) {
-        s += shape;
+      StringBuilder s = new StringBuilder("LAYER: ");
+      s.append(key);
+      if (name != null) {
+        s.append(" (");
+        s.append(name);
+        s.append(")");
       }
-      return s;
+      s.append("\n");
+      for (Shape shape : shapes) {
+        s.append(shape);
+      }
+      return s.toString();
     }
   }
 

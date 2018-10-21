@@ -44,6 +44,7 @@ import loci.common.RandomAccessInputStream;
 import loci.common.Region;
 import loci.common.enumeration.EnumException;
 import loci.formats.FormatException;
+import loci.formats.ImageTools;
 import loci.formats.codec.CodecOptions;
 
 import org.slf4j.Logger;
@@ -209,7 +210,53 @@ public class TiffParser {
 
   // -- TiffParser methods - IFD parsing --
 
-  /** Returns all IFDs in the file.  */
+  /** Returns the main list of IFDs in the file.
+   *
+   * This does not include SUBIFDS.
+   */
+  public IFDList getMainIFDs() throws IOException {
+    if (ifdList != null) return ifdList;
+
+    long[] offsets = getIFDOffsets();
+    IFDList ifds = new IFDList();
+
+    for (long offset : offsets) {
+      IFD ifd = getIFD(offset);
+      if (ifd == null) continue;
+      if (ifd.containsKey(IFD.IMAGE_WIDTH)) {
+        ifds.add(ifd);
+      }
+    }
+    if (doCaching) {
+      ifdList = ifds;
+    }
+
+    return ifds;
+  }
+
+  /** Returns the SUBIFDS belonging to a given IFD. */
+  public IFDList getSubIFDs(IFD ifd) throws IOException {
+    IFDList list = new IFDList();
+    long[] offsets = null;
+    try {
+      fillInIFD(ifd);
+      offsets = ifd.getIFDLongArray(IFD.SUB_IFD);
+    } catch (FormatException e) {
+    }
+
+    if (offsets != null) {
+      for (long offset : offsets) {
+        list.add(getIFD(offset));
+      }
+    }
+
+    return list;
+  }
+
+  /** Returns all IFDs in the file, including SUBIFDS.
+   * @deprecated Use {@link #getMainIFDs()} and {@link #getSubIFDs(IFD)} instead.
+   */
+  @Deprecated
   public IFDList getIFDs() throws IOException {
     if (ifdList != null) return ifdList;
 
@@ -244,7 +291,7 @@ public class TiffParser {
 
   /** Returns thumbnail IFDs. */
   public IFDList getThumbnailIFDs() throws IOException {
-    IFDList ifds = getIFDs();
+    IFDList ifds = getMainIFDs();
     IFDList thumbnails = new IFDList();
     for (IFD ifd : ifds) {
       Number subfile = (Number) ifd.getIFDValue(IFD.NEW_SUBFILE_TYPE);
@@ -258,7 +305,7 @@ public class TiffParser {
 
   /** Returns non-thumbnail IFDs. */
   public IFDList getNonThumbnailIFDs() throws IOException {
-    IFDList ifds = getIFDs();
+    IFDList ifds = getMainIFDs();
     IFDList nonThumbs = new IFDList();
     for (IFD ifd : ifds) {
       Number subfile = (Number) ifd.getIFDValue(IFD.NEW_SUBFILE_TYPE);
@@ -272,7 +319,7 @@ public class TiffParser {
 
   /** Returns EXIF IFDs. */
   public IFDList getExifIFDs() throws FormatException, IOException {
-    IFDList ifds = getIFDs();
+    IFDList ifds = getMainIFDs();
     IFDList exif = new IFDList();
     for (IFD ifd : ifds) {
       long offset = ifd.getIFDLongValue(IFD.EXIF, 0);
@@ -375,10 +422,10 @@ public class TiffParser {
     ifd.put(new Integer(IFD.BIG_TIFF), new Boolean(bigTiff));
 
     // read in directory entries for this IFD
-    LOGGER.trace("getIFDs: seeking IFD at {}", offset);
+    LOGGER.trace("getIFD: seeking IFD at {}", offset);
     in.seek(offset);
     long numEntries = bigTiff ? in.readLong() : in.readUnsignedShort();
-    LOGGER.trace("getIFDs: {} directory entries to read", numEntries);
+    LOGGER.trace("getIFD: {} directory entries to read", numEntries);
     if (numEntries == 0 || numEntries == 1) return ifd;
 
     int bytesPerEntry = bigTiff ?
@@ -412,7 +459,7 @@ public class TiffParser {
       if (count * bpe + pointer > inputLen) {
         int oldCount = count;
         count = (int) ((inputLen - pointer) / bpe);
-        LOGGER.trace("getIFDs: truncated {} array elements for tag {}",
+        LOGGER.trace("getIFD: truncated {} array elements for tag {}",
           (oldCount - count), tag);
         if (count < 0) count = oldCount;
       }
@@ -725,6 +772,14 @@ public class TiffParser {
     in.seek(stripOffset);
     in.read(tile);
 
+    // reverse bits in each byte if FillOrder == 2
+
+    if (ifd.getIFDIntValue(IFD.FILL_ORDER) == 2) {
+      for (int i=0; i<tile.length; i++) {
+        tile[i] = (byte) (Integer.reverse(tile[i]) >> 24);
+      }
+    }
+
     codecOptions.maxBytes = (int) Math.max(size, tile.length);
     codecOptions.ycbcr =
       ifd.getPhotometricInterpretation() == PhotoInterp.Y_CB_CR &&
@@ -870,10 +925,11 @@ public class TiffParser {
 
     // special case: if we only need one tile, and that tile doesn't need
     // any special handling, then we can just read it directly and return
-    if (effectiveChannels == 1 && (ifd.getBitsPerSample()[0] % 8) == 0 &&
+    if ((effectiveChannels == 1 || planarConfig == 1) && (ifd.getBitsPerSample()[0] % 8) == 0 &&
       photoInterp != PhotoInterp.WHITE_IS_ZERO &&
       photoInterp != PhotoInterp.CMYK && photoInterp != PhotoInterp.Y_CB_CR &&
       compression == TiffCompression.UNCOMPRESSED &&
+      ifd.getIFDIntValue(IFD.FILL_ORDER) != 2 &&
       numTileRows * numTileCols == 1 && stripOffsets != null && stripByteCounts != null &&
       in.length() >= stripOffsets[0] + stripByteCounts[0])
     {
@@ -885,6 +941,7 @@ public class TiffParser {
       if (planarConfig == 2) {
         lastTile = stripOffsets.length - 1;
       }
+      int bytes = ifd.getBitsPerSample()[0] / 8;
 
       int offset = 0;
       for (int tile=firstTile; tile<=lastTile; tile++) {
@@ -910,7 +967,7 @@ public class TiffParser {
         else {
           // we only want a piece of the tile, so read each row separately
           // this is especially necessary for large single-tile images
-          int bpp = ifd.getBitsPerSample()[0] / 8;
+          int bpp = bytes * effectiveChannels;
           in.skipBytes((int) (y * bpp * tileWidth));
           for (int row=0; row<height; row++) {
             in.skipBytes(x * bpp);
@@ -927,6 +984,15 @@ public class TiffParser {
               break;
             }
           }
+        }
+      }
+      if (effectiveChannels > 1) {
+        byte[][] split = new byte[effectiveChannels][buf.length / effectiveChannels];
+        for (int c=0; c<split.length; c++) {
+          split[c] = ImageTools.splitChannels(buf, c, effectiveChannels, bytes, false, true);
+        }
+        for (int c=0; c<split.length; c++) {
+          System.arraycopy(split[c], 0, buf, c * split[c].length, split[c].length);
         }
       }
       return buf;
@@ -1271,5 +1337,4 @@ public class TiffParser {
 
     return new TiffIFDEntry(entryTag, entryType, valueCount, offset);
   }
-
 }

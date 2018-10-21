@@ -94,6 +94,9 @@ public class MinimalTiffReader extends FormatReader {
 
   protected boolean seriesToIFD = false;
 
+  /** Merge SubIFDs into the main IFD list. */
+  protected transient boolean mergeSubIFDs = false;
+
   /** Number of JPEG 2000 resolution levels. */
   private Integer resolutionLevels;
 
@@ -287,7 +290,6 @@ public class MinimalTiffReader extends FormatReader {
     } else {
       ifd = ifds.get(no);
     }
-
     if ((firstIFD.getCompression() == TiffCompression.JPEG_2000
         || firstIFD.getCompression() == TiffCompression.JPEG_2000_LOSSY)
         && resolutionLevels != null) {
@@ -446,7 +448,17 @@ public class MinimalTiffReader extends FormatReader {
 
     LOGGER.info("Reading IFDs");
 
-    IFDList allIFDs = tiffParser.getIFDs();
+    IFDList allIFDs = null;
+    if (!mergeSubIFDs) {
+      allIFDs = tiffParser.getMainIFDs();
+    }
+    else {
+      allIFDs = new IFDList();
+      for (IFD ifd : tiffParser.getMainIFDs()) {
+        allIFDs.add(ifd);
+        allIFDs.addAll(tiffParser.getSubIFDs(ifd));
+      }
+    }
 
     if (allIFDs == null || allIFDs.size() == 0) {
       throw new FormatException("No IFDs found");
@@ -456,6 +468,7 @@ public class MinimalTiffReader extends FormatReader {
     thumbnailIFDs = new IFDList();
     subResolutionIFDs = new ArrayList<IFDList>();
     for (IFD ifd : allIFDs) {
+      tiffParser.fillInIFD(ifd);
       Number subfile = (Number) ifd.getIFDValue(IFD.NEW_SUBFILE_TYPE);
       int subfileType = subfile == null ? 0 : subfile.intValue();
       if (subfileType != 1 || allIFDs.size() <= 1) {
@@ -474,7 +487,6 @@ public class MinimalTiffReader extends FormatReader {
 
     tiffParser.setAssumeEqualStrips(equalStrips);
     for (IFD ifd : ifds) {
-      tiffParser.fillInIFD(ifd);
       if ((ifd.getCompression() == TiffCompression.JPEG_2000
           || ifd.getCompression() == TiffCompression.JPEG_2000_LOSSY) &&
           ifd.getImageWidth() == ifds.get(0).getImageWidth()) {

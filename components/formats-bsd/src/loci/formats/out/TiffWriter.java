@@ -67,6 +67,8 @@ public class TiffWriter extends FormatWriter {
     CompressionType.J2K_LOSSY.getCompression();
   public static final String COMPRESSION_JPEG =
     CompressionType.JPEG.getCompression();
+  public static final String COMPRESSION_ZLIB =
+    CompressionType.ZLIB.getCompression();
 
   private static final String[] BIG_TIFF_SUFFIXES = {"tf2", "tf8", "btf"};
 
@@ -122,6 +124,9 @@ public class TiffWriter extends FormatWriter {
     else if (compression.equals(COMPRESSION_JPEG)) {
       compressType = TiffCompression.JPEG;
     }
+    else if (compression.equals(COMPRESSION_ZLIB)) {
+      compressType = TiffCompression.DEFLATE;
+    }
     Object v = ifd.get(new Integer(IFD.COMPRESSION));
     if (v == null)
       ifd.put(new Integer(IFD.COMPRESSION), compressType.getCode());
@@ -141,7 +146,8 @@ public class TiffWriter extends FormatWriter {
       COMPRESSION_LZW,
       COMPRESSION_J2K,
       COMPRESSION_J2K_LOSSY,
-      COMPRESSION_JPEG
+      COMPRESSION_JPEG,
+      COMPRESSION_ZLIB
     };
     isBigTiff = false;
   }
@@ -220,30 +226,29 @@ public class TiffWriter extends FormatWriter {
     int index = no;
     int imageWidth = retrieve.getPixelsSizeX(series).getValue().intValue();
     int imageHeight = retrieve.getPixelsSizeY(series).getValue().intValue();
-    tileSizeX = getTileSizeX();
-    tileSizeY = getTileSizeY();
-    if (tileSizeX != imageWidth || tileSizeY != imageHeight) {
-      ifd.put(new Integer(IFD.TILE_WIDTH), new Long(tileSizeX));
-      ifd.put(new Integer(IFD.TILE_LENGTH), new Long(tileSizeY));
+    int currentTileSizeX = getTileSizeX();
+    int currentTileSizeY = getTileSizeY();
+    if (currentTileSizeX != imageWidth || currentTileSizeY != imageHeight) {
+      ifd.put(new Integer(IFD.TILE_WIDTH), new Long(currentTileSizeX));
+      ifd.put(new Integer(IFD.TILE_LENGTH), new Long(currentTileSizeY));
     }
-    if (tileSizeX < w || tileSizeY < h) {
-      int tileNo = no;
-      int numTilesX = (w + (x % tileSizeX) + tileSizeX - 1) / tileSizeX;
-      int numTilesY = (h + (y % tileSizeY) + tileSizeY - 1) / tileSizeY;
+    if (currentTileSizeX < w || currentTileSizeY < h) {
+      int numTilesX = (w + (x % currentTileSizeX) + currentTileSizeX - 1) / currentTileSizeX;
+      int numTilesY = (h + (y % currentTileSizeY) + currentTileSizeY - 1) / currentTileSizeY;
       for (int yTileIndex = 0; yTileIndex < numTilesY; yTileIndex++) {
         for (int xTileIndex = 0; xTileIndex < numTilesX; xTileIndex++) {
           Region tileParams = new Region();
-          tileParams.width = xTileIndex < numTilesX - 1 ? tileSizeX - (x % tileSizeX) : w - (tileSizeX * xTileIndex);
-          tileParams.height = yTileIndex < numTilesY - 1 ? tileSizeY - (y % tileSizeY) : h - (tileSizeY * yTileIndex);
-          tileParams.x = x + (xTileIndex * tileSizeX) - (xTileIndex > 0 ? (x % tileSizeX) : 0);
-          tileParams.y = y + (yTileIndex * tileSizeY) - (yTileIndex > 0 ? (y % tileSizeY) : 0);
+          tileParams.width = xTileIndex < numTilesX - 1 ? currentTileSizeX - (x % currentTileSizeX) : w - (currentTileSizeX * xTileIndex);
+          tileParams.height = yTileIndex < numTilesY - 1 ? currentTileSizeY - (y % currentTileSizeY) : h - (currentTileSizeY * yTileIndex);
+          tileParams.x = x + (xTileIndex * currentTileSizeX) - (xTileIndex > 0 ? (x % currentTileSizeX) : 0);
+          tileParams.y = y + (yTileIndex * currentTileSizeY) - (yTileIndex > 0 ? (y % currentTileSizeY) : 0);
           byte [] tileBuf = getTile(buf, tileParams, new Region(x, y, w, h));
 
           // This operation is synchronized
           synchronized (this) {
             // This operation is synchronized against the TIFF saver.
             synchronized (tiffSaver) {
-              index = prepareToWriteImage(tileNo++, tileBuf, ifd, tileParams.x, tileParams.y, tileParams.width, tileParams.height);
+              index = prepareToWriteImage(no, tileBuf, ifd, tileParams.x, tileParams.y, tileParams.width, tileParams.height);
               if (index == -1) {
                 return;
               }
@@ -292,7 +297,7 @@ public class TiffWriter extends FormatWriter {
     // Ensure that no more than one thread manipulated the initialized array
     // at one time.
     synchronized (this) {
-      if (no < initialized[series].length && !initialized[series][no]) {
+      if (!initialized[series][no]) {
         initialized[series][no] = true;
 
         RandomAccessInputStream tmp = createInputStream();
@@ -314,24 +319,6 @@ public class TiffWriter extends FormatWriter {
     int blockSize = w * h * c * bytesPerPixel;
     if (blockSize > buf.length) {
       c = buf.length / (w * h * bytesPerPixel);
-    }
-
-    if (bytesPerPixel > 1 && c != 1 && c != 3) {
-      // split channels
-      checkParams = false;
-
-      if (no == 0) {
-        initialized[series] = new boolean[initialized[series].length * c];
-      }
-
-      for (int i=0; i<c; i++) {
-        byte[] b = ImageTools.splitChannels(buf, i, c, bytesPerPixel,
-          false, interleaved);
-
-        saveBytes(no * c + i, b, (IFD) ifd.clone(), x, y, w, h);
-      }
-      checkParams = true;
-      return -1;
     }
 
     formatCompression(ifd);
@@ -444,21 +431,7 @@ public class TiffWriter extends FormatWriter {
   public int getPlaneCount() {
     return getPlaneCount(series);
   }
-
-  @Override
-  protected int getPlaneCount(int series) {
-    MetadataRetrieve retrieve = getMetadataRetrieve();
-    int c = getSamplesPerPixel(series);
-    int type = FormatTools.pixelTypeFromString(
-      retrieve.getPixelsType(series).toString());
-    int bytesPerPixel = FormatTools.getBytesPerPixel(type);
-
-    if (bytesPerPixel > 1 && c != 1 && c != 3) {
-      return super.getPlaneCount(series) * c;
-    }
-    return super.getPlaneCount(series);
-  }
-
+  
   // -- IFormatWriter API methods --
 
   /**
@@ -547,7 +520,7 @@ public class TiffWriter extends FormatWriter {
   @Override
   public int getTileSizeX() throws FormatException {
     if (tileSizeX == 0) {
-      tileSizeX = super.getTileSizeX();
+      return super.getTileSizeX();
     }
     return tileSizeX;
   }
@@ -567,7 +540,7 @@ public class TiffWriter extends FormatWriter {
   @Override
   public int getTileSizeY() throws FormatException {
     if (tileSizeY == 0) {
-      tileSizeY = super.getTileSizeY();
+      return super.getTileSizeY();
     }
     return tileSizeY;
   }

@@ -2,7 +2,6 @@
 # available to Bio-Formats, and the order in which they should be used.
 # Please do not edit unless you know what you are doing (see reader-guide.txt).
 
-loci.formats.in.ScreenReader          # screen
 loci.formats.in.FilePatternReader     # pattern
 
 # readers for compressed/archive files
@@ -14,6 +13,7 @@ loci.formats.in.JPEGReader            # jpg, jpeg [javax.imageio]
 
 # external readers with unique file extensions
 loci.formats.in.SlideBook6Reader[type=external]      # sld
+loci.formats.in.ScreenReader[type=external]         # .screen
 
 # standalone readers with unique file extensions
 loci.formats.in.PGMReader             # pgm
@@ -94,6 +94,7 @@ loci.formats.in.FlowSightReader       # cif
 loci.formats.in.IM3Reader             # im3
 loci.formats.in.I2IReader             # i2i
 loci.formats.in.SPEReader             # spe
+loci.formats.in.OIRReader             # oir
 
 # multi-extension messes
 loci.formats.in.JEOLReader            # dat, img, par
@@ -166,7 +167,9 @@ loci.formats.in.SISReader             # tif
 loci.formats.in.DNGReader             # cr2, crw, jpg, thm, wav, tif?
 loci.formats.in.ZeissTIFFReader # tif
 loci.formats.in.LeicaSCNReader        # scn
+loci.formats.in.VectraReader          # tif, tiff, qptiff
 loci.formats.in.SlidebookTiffReader   # tiff
+loci.formats.in.IonpathMIBITiffReader   # tif, tiff
 
 # standard TIFF reader must go last (it accepts any TIFF)
 loci.formats.in.TiffDelegateReader    # tif, tiff

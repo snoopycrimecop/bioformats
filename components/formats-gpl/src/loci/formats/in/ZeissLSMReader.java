@@ -197,6 +197,8 @@ public class ZeissLSMReader extends FormatReader {
     new HashMap<Integer, String>();
   private Color[] channelColor;
 
+  private transient boolean isSIM = false;
+
   // -- Constructor --
 
   /** Constructs a new Zeiss LSM reader. */
@@ -280,6 +282,7 @@ public class ZeissLSMReader extends FormatReader {
       acquiredDate.clear();
       channelNames = null;
       channelColor = null;
+      isSIM = false;
     }
   }
 
@@ -290,7 +293,7 @@ public class ZeissLSMReader extends FormatReader {
     if (!FormatTools.validStream(stream, blockLen, false)) return false;
     TiffParser parser = new TiffParser(stream);
     if (parser.isValidHeader()) {
-      return true;
+      return parser.getIFDOffsets().length > 1;
     }
     stream.seek(4);
     if (stream.readShort() == 0x5374) {
@@ -1082,6 +1085,11 @@ public class ZeissLSMReader extends FormatReader {
         }
       }
 
+      if (applicationTagOffset != 0) {
+        in.seek(applicationTagOffset);
+        parseApplicationTags();
+      }
+
       if (channelColorsOffset != 0) {
         in.seek(channelColorsOffset + 12);
         int colorsOffset = in.readInt();
@@ -1102,6 +1110,23 @@ public class ZeissLSMReader extends FormatReader {
             int red = color & 0xff;
             int green = (color & 0xff00) >> 8;
             int blue = (color & 0xff0000) >> 16;
+
+            // specially handle the case when the stored color is black
+            // if this is not the first channel, copy the color from the
+            // previous channel (necessary for SIM data)
+            // otherwise set the color to white, as this will display better
+            if (red == 0 && green == 0 & blue == 0) {
+              if (i > 0 && isSIM) {
+                red = channelColor[i - 1].getRed();
+                green = channelColor[i - 1].getGreen();
+                blue = channelColor[i - 1].getBlue();
+              }
+              else {
+                red = 255;
+                green = 255;
+                blue = 255;
+              }
+            }
 
             channelColor[i] = new Color(red, green, blue, 255);
 
@@ -1276,11 +1301,6 @@ public class ZeissLSMReader extends FormatReader {
         for (SubBlock block : nonAcquiredBlocks) {
           populateMetadataStore(block, store, series);
         }
-      }
-
-      if (applicationTagOffset != 0) {
-        in.seek(applicationTagOffset);
-        parseApplicationTags();
       }
     }
 
@@ -2236,6 +2256,10 @@ public class ZeissLSMReader extends FormatReader {
       }
 
       addGlobalMeta(entryName, data);
+
+      if (entryName.startsWith("SimOut") || entryName.startsWith("SimPar")) {
+        isSIM = true;
+      }
 
       if (in.getFilePointer() == fp + entrySize) {
         continue;

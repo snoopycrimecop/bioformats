@@ -16,7 +16,7 @@
 
   <name>Bio-Formats library</name>
   <description>A library for reading and writing popular microscopy file formats.</description>
-  <url>http://www.openmicroscopy.org/site/products/bio-formats</url>
+  <url>https://www.openmicroscopy.org/bio-formats</url>
   <inceptionYear>2005</inceptionYear>
 
   <licenses>
@@ -28,6 +28,21 @@
   </licenses>
 
   <dependencies>
+    <dependency>
+      <groupId>org.openmicroscopy</groupId>
+      <artifactId>ome-common</artifactId>
+      <version>${ome-common.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmicroscopy</groupId>
+      <artifactId>ome-xml</artifactId>
+      <version>${ome-model.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>formats-bsd</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>formats-api</artifactId>
@@ -45,21 +60,20 @@
     </dependency>
     <dependency>
       <groupId>org.openmicroscopy</groupId>
-      <artifactId>ome-xml</artifactId>
-      <version>${ome-model.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.openmicroscopy</groupId>
       <artifactId>ome-poi</artifactId>
       <version>${ome-poi.version}</version>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>${project.groupId}</groupId>
       <artifactId>formats-bsd</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>ome</groupId><!-- skip bump -->
+=======
+      <groupId>ome</groupId>
+>>>>>>> v5.9.2
       <artifactId>jxrlib-all</artifactId>
       <version>${jxrlib.version}</version>
     </dependency>
@@ -138,6 +152,13 @@
     <!-- NB: dependency:analyze has false warning about xml-apis:xml-apis. -->
 
     <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+      <version>2.3.0</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
       <groupId>org.testng</groupId>
       <artifactId>testng</artifactId>
       <version>${testng.version}</version>
@@ -162,6 +183,11 @@
       <artifactId>jhdf5</artifactId>
       <version>14.12.0</version>
     </dependency>
+    <dependency>
+    	<groupId>org.json</groupId>
+    	<artifactId>json</artifactId>
+    	<version>20090211</version>
+    </dependency>
   </dependencies>
 
   <properties>
@@ -170,6 +196,10 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+      </plugin>
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
@@ -197,6 +227,9 @@
               <additionalClasspathElements>
                 <additionalClasspathElement>${basedir}/../../ant/</additionalClasspathElement>
               </additionalClasspathElements>
+              <systemPropertyVariables>
+                <bioformats_can_do_upgrade_check>false</bioformats_can_do_upgrade_check>
+              </systemPropertyVariables>
             </configuration>
           </execution>
           <execution>
@@ -215,6 +248,9 @@
               <classpathDependencyExcludes>
                 <classpathDependencyExclude>org.openmicroscopy:ome-mdbtools</classpathDependencyExclude>
               </classpathDependencyExcludes>
+              <systemPropertyVariables>
+                <bioformats_can_do_upgrade_check>false</bioformats_can_do_upgrade_check>
+              </systemPropertyVariables>
             </configuration>
           </execution>
           <execution>
@@ -233,6 +269,9 @@
               <classpathDependencyExcludes>
                 <classpathDependencyExclude>org.openmicroscopy:ome-poi</classpathDependencyExclude>
               </classpathDependencyExcludes>
+              <systemPropertyVariables>
+                <bioformats_can_do_upgrade_check>false</bioformats_can_do_upgrade_check>
+              </systemPropertyVariables>
             </configuration>
           </execution>
           <execution>
@@ -251,6 +290,9 @@
               <classpathDependencyExcludes>
                 <classpathDependencyExclude>edu.ucar:netcdf</classpathDependencyExclude>
               </classpathDependencyExcludes>
+              <systemPropertyVariables>
+                <bioformats_can_do_upgrade_check>false</bioformats_can_do_upgrade_check>
+              </systemPropertyVariables>
             </configuration>
           </execution>
         </executions>
@@ -271,7 +313,7 @@
       <id>melissa</id>
       <name>Melissa Linkert</name>
       <email>melissa@glencoesoftware.com</email>
-      <url>http://www.openmicroscopy.org/site/about/development-teams/glencoe-software</url>
+      <url>https://www.glencoesoftware.com/melissa-linkert.html</url>
       <organization>Glencoe Software</organization>
       <organizationUrl>http://glencoesoftware.com/</organizationUrl>
       <roles>
@@ -279,9 +321,6 @@
         <role>developer</role>
       </roles>
       <timezone>-6</timezone>
-      <properties>
-        <picUrl>http://www.openmicroscopy.org/site/about/development-teams/glencoe-software/melissalinkert.png</picUrl>
-      </properties>
     </developer>
     <developer>
       <id>curtis</id>
@@ -302,44 +341,21 @@
     <developer>
       <id>callan</id>
       <name>Chris Allan</name>
-      <email>callan@lifesci.dundee.ac.uk</email>
-      <url>http://www.openmicroscopy.org/site/about/development-teams/jason</url>
-      <organization>Swedlow Lab, University of Dundee</organization>
-      <organizationUrl>http://www.lifesci.dundee.ac.uk/groups/jason_swedlow/</organizationUrl>
+      <email>callan@glencoesoftware.com</email>
+      <url>https://glencoesoftware.com/chris-allan.html</url>
+      <organization>Glencoe Software</organization>
+      <organizationUrl>https://glencoesoftware.com</organizationUrl>
       <roles>
         <role>architect</role>
         <role>developer</role>
       </roles>
       <timezone>0</timezone>
-      <properties>
-        <picUrl>http://www.openmicroscopy.org/site/about/development-teams/jason/chrisallan.jpg</picUrl>
-      </properties>
     </developer>
   </developers>
 
   <contributors>
-    <contributor>
-      <name>Eric Kjellman</name>
-      <organization>UW-Madison LOCI</organization>
-      <organizationUrl>http://loci.wisc.edu/</organizationUrl>
-      <roles>
-        <role>developer</role>
-      </roles>
-      <timezone>-6</timezone>
-    </contributor>
-    <contributor>
-      <name>Brian Loranger</name>
-      <url>http://www.openmicroscopy.org/site/about/development-teams/jason</url>
-      <organization>Swedlow Lab, University of Dundee</organization>
-      <organizationUrl>http://www.lifesci.dundee.ac.uk/groups/jason_swedlow/</organizationUrl>
-      <roles>
-        <role>developer</role>
-      </roles>
-      <timezone>0</timezone>
-      <properties>
-        <picUrl>http://www.openmicroscopy.org/site/about/development-teams/jason/brian.jpg</picUrl>
-      </properties>
-    </contributor>
+    <contributor><name>Eric Kjellman</name></contributor>
+    <contributor><name>Brian Loranger</name></contributor>
     <contributor><name>Eric Albert</name></contributor>
     <contributor><name>Jonathan Armond</name></contributor>
     <contributor><name>Simon Blanchoud</name></contributor>

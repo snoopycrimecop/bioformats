@@ -81,6 +81,14 @@ public class MicromanagerReader extends FormatReader {
   private static final int MM_JSON_TAG = 51123;
 
   /**
+   * Defines maximum Micro-Manager version supported.
+   * Anything acquired with a version after 1.4.22 (especially 2.x.x)
+   * is expected to not work reliably.
+   */
+  private static final int MAX_MAJOR_VERSION = 1;
+  private static final String MAX_VERSION = "1.4.22";
+
+  /**
    * Optional file containing additional acquisition parameters.
    * (And yes, the spelling is correct.)
    */
@@ -317,9 +325,13 @@ public class MicromanagerReader extends FormatReader {
         }
       }
 
-      if (positions.size() > 1) {
-        Location parent = new Location(p.metadataFile).getParentFile();
-        store.setImageName(parent.getName(), i);
+      if (p.name != null) {
+        store.setImageName(p.name, i);
+      } else {
+        if (positions.size() > 1) {
+          Location parent = new Location(p.metadataFile).getParentFile();
+          store.setImageName(parent.getName(), i);
+        }
       }
 
       if (getMetadataOptions().getMetadataLevel() != MetadataLevel.MINIMUM) {
@@ -448,7 +460,7 @@ public class MicromanagerReader extends FormatReader {
       }
       try {
         TiffParser parser = new TiffParser(path);
-        int nIFDs = parser.getIFDs().size();
+        int nIFDs = parser.getMainIFDs().size();
         IFD firstIFD = parser.getFirstIFD();
         parser.fillInIFD(firstIFD);
 
@@ -480,7 +492,7 @@ public class MicromanagerReader extends FormatReader {
           }
         }
 
-        IFDList ifds = parser.getIFDs();
+        IFDList ifds = parser.getMainIFDs();
         for (int i=0; i<ifds.size(); i++) {
           if (!parseMMJSONTag) {
             break;
@@ -531,13 +543,14 @@ public class MicromanagerReader extends FormatReader {
               (key != null && value == null))
             {
               if (value == null && (propType == null || !propType.equals("PropType"))) {
-                value = token;
+                StringBuilder sb = new StringBuilder(token);
 
                 while (q + 1 < tokens.length && tokens[q + 1].trim().length() > 0) {
-                  value += ':';
-                  value += tokens[q + 1];
+                  sb.append(':');
+                  sb.append(tokens[q + 1]);
                   q++;
                 }
+                value = sb.toString();
               }
               if (!value.equals("PropVal")) {
                 parseKeyAndValue(key, value, digits, plane + i, 1);
@@ -701,7 +714,7 @@ public class MicromanagerReader extends FormatReader {
         value = value.substring(0, value.length() - 1);
         value = value.replaceAll("\"", "");
         if (value.endsWith(",")) value = value.substring(0, value.length() - 1);
-        addSeriesMeta(key, value);
+        handleKeyValue(key, value);
         if (key.equals("Channels")) {
           ms.sizeC = Integer.parseInt(value);
         }
@@ -776,7 +789,8 @@ public class MicromanagerReader extends FormatReader {
           token.indexOf("\"", dash)));
 
         token = st.nextToken().trim();
-        String key = "", value = "";
+        String key = "";
+        StringBuilder valueBuffer = new StringBuilder();
         boolean valueArray = false;
         int nestedCount = 0;
 
@@ -798,7 +812,7 @@ public class MicromanagerReader extends FormatReader {
               valueArray = false;
             }
             else {
-              value += token.trim().replaceAll("\"", "");
+              valueBuffer.append(token.trim().replaceAll("\"", ""));
               token = st.nextToken().trim();
               continue;
             }
@@ -806,10 +820,10 @@ public class MicromanagerReader extends FormatReader {
           else {
             int colon = token.indexOf(':');
             key = token.substring(1, colon).trim();
-            value = token.substring(colon + 1, token.length() - 1).trim();
+            valueBuffer.setLength(0);
+            valueBuffer.append(token.substring(colon + 1, token.length() - 1).trim().replaceAll("\"", ""));
 
             key = key.replaceAll("\"", "");
-            value = value.replaceAll("\"", "");
 
             if (token.trim().endsWith("[")) {
               valueArray = true;
@@ -818,7 +832,8 @@ public class MicromanagerReader extends FormatReader {
             }
           }
 
-          addSeriesMeta(key, value);
+          String value = valueBuffer.toString();
+          handleKeyValue(key, value);
 
           if (key.equals("Exposure-ms")) {
             p.exposureTime = new Time(Double.valueOf(value), UNITS.MILLISECOND);
@@ -849,6 +864,9 @@ public class MicromanagerReader extends FormatReader {
           }
           else if (key.startsWith("DAC-") && key.endsWith("-Volts")) {
             p.voltage.add(new Double(value));
+          }
+          else if (key.equals("PositionName") && !value.equals("null")) {
+            p.name = value;
           }
           else if (key.equals("FileName")) {
             p.fileNameMap.put(new Index(slice), value);
@@ -1073,6 +1091,36 @@ public class MicromanagerReader extends FormatReader {
     return baseName + "_" + METADATA;
   }
 
+  /**
+   * Process a piece of metadata represented by a key/value pair.
+   * Mostly this just adds to the original metadata table, but
+   * is also helpful for handling specific keys consistently independent of
+   * which file/INI table the key and value came from.
+   */
+  private void handleKeyValue(String key, String value) {
+    if (key == null || value == null) {
+      return;
+    }
+    addSeriesMeta(key, value);
+
+    if (key.equals("MicroManagerVersion")) {
+      String[] version = value.split("\\.");
+      Integer major = null;
+      try {
+        if (version.length > 0) {
+          major = new Integer(version[0]);
+        }
+      }
+      catch (NumberFormatException e) {
+        LOGGER.trace("Could not parse major version " + version[0], e);
+      }
+      if (major == null || major > MAX_MAJOR_VERSION) {
+        LOGGER.warn("Dataset acquired with Micro-Manager {}; " +
+          "versions greater than {} are not officially supported", value, MAX_VERSION);
+      }
+    }
+  }
+
   // -- Helper classes --
 
   /** SAX handler for parsing Acqusition.xml. */
@@ -1085,7 +1133,7 @@ public class MicromanagerReader extends FormatReader {
         String key = attributes.getValue("key");
         String value = attributes.getValue("value");
 
-        addSeriesMeta(key, value);
+        handleKeyValue(key, value);
       }
     }
   }
@@ -1097,6 +1145,7 @@ public class MicromanagerReader extends FormatReader {
 
     public String metadataFile;
     public String xmlFile;
+    public transient String name;
 
     public String[] channels;
 

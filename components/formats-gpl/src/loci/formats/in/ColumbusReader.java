@@ -2,7 +2,7 @@
  * #%L
  * OME Bio-Formats package for reading and converting biological file formats.
  * %%
- * Copyright (C) 2005 - 2014 Open Microscopy Environment:
+ * Copyright (C) 2014 - 2017 Open Microscopy Environment:
  *   - Board of Regents of the University of Wisconsin-Madison
  *   - Glencoe Software, Inc.
  *   - University of Dundee
@@ -48,7 +48,6 @@ import loci.formats.meta.MetadataStore;
 
 import ome.xml.model.primitives.Color;
 import ome.xml.model.primitives.NonNegativeInteger;
-import ome.xml.model.primitives.PositiveFloat;
 import ome.xml.model.primitives.PositiveInteger;
 import ome.xml.model.primitives.Timestamp;
 
@@ -58,8 +57,6 @@ import ome.units.UNITS;
 
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
-import org.w3c.dom.Attr;
-import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -124,11 +121,8 @@ public class ColumbusReader extends FormatReader {
     if (localName.equals(XML_FILE)) {
       return true;
     }
-    Location parent = new Location(name).getAbsoluteFile().getParentFile();
-    parent = parent.getParentFile();
-    Location xml = new Location(parent, XML_FILE);
-    if (!xml.exists()) {
-      return false;
+    if (null != findXML(name)) {
+      return true;
     }
 
     return super.isThisType(name, open);
@@ -213,21 +207,12 @@ public class ColumbusReader extends FormatReader {
 
   /* @see loci.formats.FormatReader#initFile(String) */
   protected void initFile(String id) throws FormatException, IOException {
-    // make sure that we have the XML file and not a TIFF file
-
-    if (!checkSuffix(id, "xml")) {
-      Location parent = new Location(id).getAbsoluteFile().getParentFile();
-      Location xml = new Location(parent, XML_FILE);
-      if (!xml.exists()) {
-        throw new FormatException("Could not find XML file " +
-          xml.getAbsolutePath());
-      }
-      initFile(xml.getAbsolutePath());
-      return;
+    Location xml = findXML(id);
+    if (null == xml) {
+      throw new FormatException("Could not find " + XML_FILE);
     }
-    else {
-      super.initFile(id);
-    }
+    id = xml.getAbsolutePath();
+    super.initFile(id);
 
     Location parent = new Location(currentId).getAbsoluteFile().getParentFile();
 
@@ -430,7 +415,7 @@ public class ColumbusReader extends FormatReader {
                 p = lookupPlane(row, col, field, t, c);
                 if (p != null) {
                   p.series = wellSample;
-                  store.setPlaneDeltaT(new Time(p.deltaT - timestampSeconds, UNITS.S), p.series, getIndex(0, c, t));
+                  store.setPlaneDeltaT(new Time(p.deltaT - timestampSeconds, UNITS.SECOND), p.series, getIndex(0, c, t));
                 }
               }
             }
@@ -607,6 +592,21 @@ public class ColumbusReader extends FormatReader {
     return null;
   }
 
+  private static Location findXML(String name) {
+    Location parent = new Location(name).getAbsoluteFile().getParentFile();
+    Location xml = new Location(parent, XML_FILE);
+    if (xml.exists()) {
+      return xml;
+    }
+    if (parent.getParent() != null) {
+      xml = new Location(parent.getParentFile(), XML_FILE);
+      if (xml.exists()) {
+        return xml;
+      }
+    }
+    return null;
+  }
+
   // -- Helper classes --
 
 
@@ -698,7 +698,7 @@ public class ColumbusReader extends FormatReader {
         measurementName = value;
       }
       else if (currentName.equals("Reference")) {
-        metadataFiles.add(value);
+        metadataFiles.add(new Location(value).toString());
       }
       else if (currentName.equals("PlateRows")) {
         plateRows = new Integer(value);

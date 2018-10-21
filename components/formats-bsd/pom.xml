@@ -16,7 +16,7 @@
 
   <name>BSD Bio-Formats readers and writers</name>
   <description>Reader and writer implementations that are BSD-licensed.</description>
-  <url>http://www.openmicroscopy.org/site/products/bio-formats</url>
+  <url>https://www.openmicroscopy.org/bio-formats</url>
   <inceptionYear>2005</inceptionYear>
 
   <licenses>
@@ -29,14 +29,9 @@
 
   <dependencies>
     <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>formats-api</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>jai_imageio</artifactId>
-      <version>${project.version}</version>
+      <groupId>org.openmicroscopy</groupId>
+      <artifactId>ome-common</artifactId>
+      <version>${ome-common.version}</version>
     </dependency>
     <dependency>
       <groupId>org.openmicroscopy</groupId>
@@ -47,6 +42,16 @@
       <groupId>org.openmicroscopy</groupId>
       <artifactId>specification</artifactId>
       <version>${ome-model.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>formats-api</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmicroscopy</groupId>
+      <artifactId>ome-codecs</artifactId>
+      <version>${ome-codecs.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
@@ -110,15 +115,22 @@
       <!-- NB: We want this, despite warning from dependency:analyze. -->
       <groupId>xalan</groupId>
       <artifactId>serializer</artifactId>
-      <version>2.7.2</version>
+      <version>${xalan.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <!-- NB: We want this, despite warning from dependency:analyze. -->
       <groupId>xalan</groupId>
       <artifactId>xalan</artifactId>
-      <version>2.7.2</version>
+      <version>${xalan.version}</version>
       <scope>runtime</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+      <version>2.3.0</version>
+      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -155,6 +167,10 @@
 
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+      </plugin>
+      <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <suiteXmlFiles>
@@ -167,6 +183,7 @@
           <systemPropertyVariables>
             <testng.runWriterSaveBytesTests>2</testng.runWriterSaveBytesTests>
             <testng.runWriterTilingTests>2</testng.runWriterTilingTests>
+            <bioformats_can_do_upgrade_check>false</bioformats_can_do_upgrade_check>
           </systemPropertyVariables>
         </configuration>
       </plugin>
@@ -179,51 +196,6 @@
         </configuration>
       </plugin>
     </plugins>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>exec-maven-plugin</artifactId>
-                    <versionRange>[1.2.1,)</versionRange>
-                    <goals>
-                      <goal>exec</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <execute>
-                      <runOnIncremental>false</runOnIncremental>
-                    </execute>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                	<pluginExecutionFilter>
-                		<groupId>org.codehaus.mojo</groupId>
-                		<artifactId>
-                			build-helper-maven-plugin
-                		</artifactId>
-                		<versionRange>[1.4,)</versionRange>
-                		<goals>
-                			<goal>add-source</goal>
-                		</goals>
-                	</pluginExecutionFilter>
-                	<action>
-                		<ignore></ignore>
-                	</action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
   </build>
 
   <developers>
@@ -247,7 +219,7 @@
       <id>melissa</id>
       <name>Melissa Linkert</name>
       <email>melissa@glencoesoftware.com</email>
-      <url>http://www.openmicroscopy.org/site/about/development-teams/glencoe-software</url>
+      <url>https://www.glencoesoftware.com/melissa-linkert.html</url>
       <organization>Glencoe Software</organization>
       <organizationUrl>http://glencoesoftware.com/</organizationUrl>
       <roles>
@@ -255,9 +227,6 @@
         <role>developer</role>
       </roles>
       <timezone>-6</timezone>
-      <properties>
-        <picUrl>http://www.openmicroscopy.org/site/about/development-teams/glencoe-software/melissalinkert.png</picUrl>
-      </properties>
     </developer>
     <developer>
       <id>curtis</id>
@@ -276,4 +245,61 @@
       </properties>
     </developer>
   </developers>
+
+  <profiles>
+    <profile>
+      <id>only-eclipse</id>
+      <activation>
+        <property>
+          <name>m2e.version</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.eclipse.m2e</groupId>
+            <artifactId>lifecycle-mapping</artifactId>
+            <version>1.0.0</version>
+            <configuration>
+              <lifecycleMappingMetadata>
+                <pluginExecutions>
+                  <pluginExecution>
+                    <pluginExecutionFilter>
+                      <groupId>org.codehaus.mojo</groupId>
+                      <artifactId>exec-maven-plugin</artifactId>
+                      <versionRange>[1.6.0,)</versionRange>
+                      <goals>
+                        <goal>exec</goal>
+                      </goals>
+                    </pluginExecutionFilter>
+                    <action>
+                      <execute>
+                        <runOnIncremental>false</runOnIncremental>
+                      </execute>
+                    </action>
+                  </pluginExecution>
+                  <pluginExecution>
+                    <pluginExecutionFilter>
+                      <groupId>org.codehaus.mojo</groupId>
+                      <artifactId>
+                        build-helper-maven-plugin
+                      </artifactId>
+                      <versionRange>[3.0.0,)</versionRange>
+                      <goals>
+                        <goal>add-source</goal>
+                      </goals>
+                    </pluginExecutionFilter>
+                    <action>
+                      <ignore></ignore>
+                    </action>
+                  </pluginExecution>
+                </pluginExecutions>
+              </lifecycleMappingMetadata>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>

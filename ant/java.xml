@@ -112,6 +112,7 @@ Type "ant -p" for a list of targets.
             <pathelement location="${test-classes.dir}"/>
             <pathelement location="${test.dir}"/>
           </classpath>
+          <sysproperty key="bioformats_can_do_upgrade_check" value="false"/>
           <xmlfileset file="${testng.xml}"/>
           <jvmarg value="-mx${testng.memory}"/>
         </testng>
@@ -127,7 +128,7 @@ Type "ant -p" for a list of targets.
       <then>
         <findbugs home="${findbugs.home}" jvmargs="-Xmx512m"
           output="xml:withMessages" outputFile="${build.dir}/findbugs.xml"
-          excludeFilter="${root.dir}/excludebugs.xml" reportLevel="high"
+          excludeFilter="${root.dir}/excludebugs.xml" reportLevel="medium"
           errorProperty="findbugsErrors"
           warningsProperty="findbugsWarnings">
           <auxClasspath refid="runtime.classpath"/>
@@ -190,7 +191,7 @@ your FindBugs installation's lib directory. E.g.:
         <attribute name="Implementation-Date" value="${DATE}"/>
         <attribute name="Implementation-Vendor" value="Open Microscopy Environment"/>
         <attribute name="Implementation-Build" value="${build.version}"/>
-        <attribute name="Implementation-URL" value="http://www.openmicroscopy.org/site/products/bio-formats/"/>
+        <attribute name="Implementation-URL" value="https://www.openmicroscopy.org/bio-formats/"/>
       </manifest>
     </jar>
     <artifact:install file="${artifact.dir}/${component.jar}">
@@ -212,7 +213,7 @@ your FindBugs installation's lib directory. E.g.:
         <attribute name="Implementation-Date" value="${DATE}"/>
         <attribute name="Implementation-Vendor" value="Open Microscopy Environment"/>
         <attribute name="Implementation-Build" value="${build.version}"/>
-        <attribute name="Implementation-URL" value="http://www.openmicroscopy.org/site/products/bio-formats/"/>
+        <attribute name="Implementation-URL" value="https://www.openmicroscopy.org/bio-formats/"/>
       </manifest>
     </jar>
     <artifact:install file="${artifact.dir}/${bundle.jar}">
@@ -250,7 +251,7 @@ your FindBugs installation's lib directory. E.g.:
       <doctitle><![CDATA[<h1>Bio-Formats</h1>]]></doctitle>
       <bottom><![CDATA[${copyright.begin} ${YEAR} ${copyright.end}]]></bottom>
       <link href="http://docs.oracle.com/javase/7/docs/api/"/>
-      <link href="http://rsbweb.nih.gov/ij/developer/api/"/>
+      <link href="https://imagej.nih.gov/ij/developer/api/"/>
       <link href="http://www.ssec.wisc.edu/visad-docs/javadoc/"/>
       <!--<link href="http://www.jdocs.com/formlayout/1.0.4/api/"/>-->
       <!--<link href="http://www.jdocs.com/looks/1.2.2/api/"/>-->

@@ -36,6 +36,7 @@ import loci.formats.FormatTools;
 import loci.formats.MetadataTools;
 import loci.formats.meta.MetadataStore;
 import ome.units.quantity.Length;
+import ome.units.unit.Unit;
 import ome.units.UNITS;
 
 /**
@@ -81,7 +82,26 @@ public class MRCReader extends FormatReader {
   /** @see loci.formats.IFormatReader#isThisType(RandomAccessInputStream) */
   @Override
   public boolean isThisType(RandomAccessInputStream stream) throws IOException {
-    return FormatTools.validStream(stream, HEADER_SIZE, false);
+    if (!FormatTools.validStream(stream, HEADER_SIZE, false)) {
+      return false;
+    }
+    stream.seek(ENDIANNESS_OFFSET);
+    stream.order(stream.read() == 68);
+    stream.seek(0);
+
+    int x = stream.readInt();
+    if (x <= 0 || x >= stream.length()) {
+      return false;
+    }
+    int y = stream.readInt();
+    if (y <= 0 || y >= stream.length()) {
+      return false;
+    }
+    int z = stream.readInt();
+    if (z <= 0 || z >= stream.length()) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -274,12 +294,19 @@ public class MRCReader extends FormatReader {
       }
     }
 
-    in.skipBytes(4);
+    int ispg = in.readInt();
+    addGlobalMeta("ISPG", ispg);
+    addGlobalMeta("Is data cube", ispg == 1);
 
     extHeaderSize = in.readInt();
 
+    in.skipBytes(8);
+
+    String extType = in.readString(4);
+    addGlobalMeta("Extended header type", extType);
+
     if (level != MetadataLevel.MINIMUM) {
-      in.skipBytes(64);
+      in.skipBytes(52);
 
       int idtype = in.readShort();
 
@@ -304,6 +331,8 @@ public class MRCReader extends FormatReader {
       for (int i=0; i<10; i++) {
         addGlobalMetaList("Label", in.readString(80));
       }
+
+      LOGGER.info("Skipping extended header of type '{}' and size {}", extType, extHeaderSize);
     }
 
     LOGGER.info("Populating metadata");
@@ -320,9 +349,15 @@ public class MRCReader extends FormatReader {
     MetadataTools.populatePixels(store, this);
 
     if (level != MetadataLevel.MINIMUM) {
-      Length sizeX = FormatTools.getPhysicalSizeX(xSize, UNITS.ANGSTROM);
-      Length sizeY = FormatTools.getPhysicalSizeY(ySize, UNITS.ANGSTROM);
-      Length sizeZ = FormatTools.getPhysicalSizeZ(zSize, UNITS.ANGSTROM);
+      // this is the unit specified by the MRC documentation
+      Unit sizeUnit = UNITS.ANGSTROM;
+      if (extType.equals("AGAR")) {
+        // FEI software typically writes physical sizes in micrometers
+        sizeUnit = UNITS.MICROM;
+      }
+      Length sizeX = FormatTools.getPhysicalSizeX(xSize, sizeUnit);
+      Length sizeY = FormatTools.getPhysicalSizeY(ySize, sizeUnit);
+      Length sizeZ = FormatTools.getPhysicalSizeZ(zSize, sizeUnit);
 
       if (sizeX != null) {
         store.setPixelsPhysicalSizeX(sizeX, 0);
