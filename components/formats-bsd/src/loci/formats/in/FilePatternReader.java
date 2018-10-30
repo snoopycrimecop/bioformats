@@ -94,11 +94,6 @@ public class FilePatternReader extends FormatReader {
   // -- IFormatReader methods --
 
   @Override
-  public void reopenFile() throws IOException {
-    helper.reopenFile();
-  }
-
-  @Override
   public int getImageCount() {
     return helper.getImageCount();
   }
