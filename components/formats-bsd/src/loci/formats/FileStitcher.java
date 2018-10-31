@@ -1307,7 +1307,6 @@ public class FileStitcher extends ReaderWrapper {
       if (r.getCurrentFile() == null) {
         r.setGroupFiles(false);
       }
-      r.setId(externals[external].getFiles()[fno]);
       r.setCoreIndex(reader.getCoreMetadataList().size() > 1 ? sno : 0);
       String newOrder = ((DimensionSwapper) reader).getInputOrder();
       if ((externals[external].getFiles().length > 1 || !r.isOrderCertain()) &&
