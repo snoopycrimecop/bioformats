@@ -2,6 +2,7 @@
 # available to Bio-Formats, and the order in which they should be used.
 # Please do not edit unless you know what you are doing (see reader-guide.txt).
 
+loci.formats.in.ScreenReader[type=external]         # .screen
 loci.formats.in.FilePatternReader     # pattern
 
 # readers for compressed/archive files
@@ -13,7 +14,6 @@ loci.formats.in.JPEGReader            # jpg, jpeg [javax.imageio]
 
 # external readers with unique file extensions
 loci.formats.in.SlideBook6Reader[type=external]      # sld
-loci.formats.in.ScreenReader[type=external]         # .screen
 
 # standalone readers with unique file extensions
 loci.formats.in.PGMReader             # pgm
