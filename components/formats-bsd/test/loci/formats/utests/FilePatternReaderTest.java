@@ -58,7 +58,8 @@ public class FilePatternReaderTest {
 
   private Path path;
   private String id;
-  private IFormatReader reader;
+  private FilePatternReader reader = new FilePatternReader();
+  private Memoizer memoizer;
   private OMEXMLService service;
   private MetadataRetrieve m;
 
@@ -67,25 +68,20 @@ public class FilePatternReaderTest {
   public void setUp() throws Exception {
     path = Files.createTempFile("test", ".pattern");
     id = path.toFile().getAbsolutePath();
+    System.out.println(id);
     path.toFile().deleteOnExit();
     
     byte[] buf = "test_t<1-10>_c<0-3>_z<1-5>.fake".getBytes();
     Files.write(path, buf);
-
-    reader = new FilePatternReader();
-    // ServiceFactory sf = new ServiceFactory();
-    // service = sf.getInstance(OMEXMLService.class);
-    // reader.setMetadataStore(service.createOMEXMLMetadata());
   }
 
   @AfterMethod
   public void tearDown() throws Exception {
     reader.close();
+    memoizer.close();
   }
 
-  @Test
-  public void testDimensions() throws Exception {
-    reader.setId(id);
+  public void assertDimensions() throws Exception {
     assertEquals(reader.getSizeX(), 512);
     assertEquals(reader.getSizeX(), 512);
     assertEquals(reader.getSizeT(), 10);
@@ -94,12 +90,21 @@ public class FilePatternReaderTest {
   }
 
   @Test
-  public void testReopenFile() throws Exception {
-    reader = new Memoizer(reader);
+  public void testSimple() throws Exception {
     reader.setId(id);
+    assertDimensions();
     reader.close();
     reader.setId(id);
-    assertEquals(reader.getSizeX(), 512);
+    assertDimensions();
   }
 
+  @Test
+  public void testMemoizer() throws Exception {
+    memoizer = new Memoizer(reader);
+    memoizer.setId(id);
+    assertDimensions();
+    memoizer.close();
+    memoizer.setId(id);
+    assertDimensions();
+  }
 }
