@@ -42,6 +42,7 @@ import java.nio.file.Path;
 
 
 import loci.formats.IFormatReader;
+import loci.formats.ChannelSeparator;
 import loci.formats.in.FilePatternReader;
 import loci.formats.Memoizer;
 import loci.formats.ome.OMEXMLMetadata;
@@ -58,8 +59,7 @@ public class FilePatternReaderTest {
 
   private Path path;
   private String id;
-  private FilePatternReader reader = new FilePatternReader();
-  private Memoizer memoizer;
+  private IFormatReader reader;
   private OMEXMLService service;
   private MetadataRetrieve m;
 
@@ -68,7 +68,6 @@ public class FilePatternReaderTest {
   public void setUp() throws Exception {
     path = Files.createTempFile("test", ".pattern");
     id = path.toFile().getAbsolutePath();
-    System.out.println(id);
     path.toFile().deleteOnExit();
     
     byte[] buf = "test_t<1-10>_c<0-3>_z<1-5>.fake".getBytes();
@@ -77,8 +76,7 @@ public class FilePatternReaderTest {
 
   @AfterMethod
   public void tearDown() throws Exception {
-    reader.close();
-    memoizer.close();
+    if (reader != null) reader.close();
   }
 
   public void assertDimensions() throws Exception {
@@ -89,8 +87,18 @@ public class FilePatternReaderTest {
     assertEquals(reader.getSizeZ(), 5);
   }
 
-  @Test
   public void testSimple() throws Exception {
+    reader = new FilePatternReader();
+    reader.setId(id);
+    assertDimensions();
+    reader.close();
+    reader.setId(id);
+    assertDimensions();
+  }
+
+  @Test
+  public void testChannelSeparator() throws Exception {
+    reader = new ChannelSeparator(new FilePatternReader());
     reader.setId(id);
     assertDimensions();
     reader.close();
@@ -100,11 +108,11 @@ public class FilePatternReaderTest {
 
   @Test
   public void testMemoizer() throws Exception {
-    memoizer = new Memoizer(reader);
-    memoizer.setId(id);
+    reader = new Memoizer(new FilePatternReader());
+    reader.setId(id);
     assertDimensions();
-    memoizer.close();
-    memoizer.setId(id);
+    reader.close();
+    reader.setId(id);
     assertDimensions();
   }
 }
