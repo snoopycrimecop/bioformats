@@ -186,4 +186,10 @@
         <class name="loci.formats.utests.MinMaxCalculatorTest"/>
       </classes>
     </test>
+    <test name="FilePatternReaderTest">
+      <groups/>
+      <classes>
+        <class name="loci.formats.utests.FilePatternReaderTest"/>
+      </classes>
+    </test>
 </suite>
