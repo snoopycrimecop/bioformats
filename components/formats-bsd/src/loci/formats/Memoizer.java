@@ -328,25 +328,6 @@ public class Memoizer extends ReaderWrapper {
 
   }
 
-  private static <T> T getMetadataOption(
-      MetadataOptions opts, String name, Class<T> type) {
-
-    if (!(opts instanceof DynamicMetadataOptions)) {
-      LOGGER.warn("Memoizer requires a DynamicMetadataOptions");
-      return null;
-    }
-    DynamicMetadataOptions options = (DynamicMetadataOptions) opts;
-
-    T opt = null;
-    String fullName = String.format("%s.%s", Memoizer.class.getName(), name);
-    try {
-      opt = type.cast(options.get(fullName));
-    } catch (ClassCastException e) {
-      LOGGER.warn("{}: wrong type (expected: {})", name, type.getName());
-    }
-    return opt;
-  }
-
   // -- Constants --
 
   /**
@@ -590,26 +571,33 @@ public class Memoizer extends ReaderWrapper {
    * @param r
    * @return Either a {@link Memoizer} or the {@link IFormatReader} argument.
    */
-  public static IFormatReader wrap(MetadataOptions options, IFormatReader r) {
+  public static IFormatReader wrap(MetadataOptions opts, IFormatReader r) {
+    if (!(opts instanceof DynamicMetadataOptions)) {
+      LOGGER.warn("Memoizer requires a DynamicMetadataOptions");
+      return r;
+    }
+
+    DynamicMetadataOptions options = (DynamicMetadataOptions) opts;
     if (options == null) {
       return r;
     }
-    Long elapsed = getMetadataOption(options, "minimumElapsed", Long.class);
+    String k = Memoizer.class.getName();
+    Long elapsed = options.getLong(k + ".minimumElapsed", DEFAULT_MINIMUM_ELAPSED);
     if (null == elapsed) {
       return r;
     }
-    Boolean inplace = getMetadataOption(options, "inPlace", Boolean.class);
+    Boolean inplace = options.getBoolean(k + ".inPlace");
     Memoizer m = null;
     if (null != inplace && inplace.booleanValue()) {
       m = new Memoizer(r, elapsed);
       r = m;
     }
-    File cachedir = getMetadataOption(options, "cacheDirectory", File.class);
+    File cachedir = options.getFile(k + ".cacheDirectory");
     if (null != cachedir) {
       m = new Memoizer(r, elapsed, cachedir);
       r = m;
     }
-    Boolean failIfMissing = getMetadataOption(options, "failIfMissing", Boolean.class);
+    Boolean failIfMissing = options.getBoolean(k + ".failIfMissing");
     if (m != null && failIfMissing != null) {
       m.failIfMissing = failIfMissing;
     }
