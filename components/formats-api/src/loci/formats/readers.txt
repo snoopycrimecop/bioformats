@@ -1,9 +1,11 @@
 # This document is a configuration file identifying all file format readers
 # available to Bio-Formats, and the order in which they should be used.
-# Please do not edit unless you know what you are doing (see reader-guide.txt).
+# Please do not edit unless you know what you are doing, see
+# https://docs.openmicroscopy.org/latest/bio-formats/developers/reader-guide.html
 
 loci.formats.in.ScreenReader[type=external]         # .screen
 loci.formats.in.FilePatternReader     # pattern
+loci.formats.in.URLReader[type=external] # urlreader
 
 # readers for compressed/archive files
 loci.formats.in.ZipReader             # zip
@@ -96,6 +98,7 @@ loci.formats.in.I2IReader             # i2i
 loci.formats.in.SPEReader             # spe
 loci.formats.in.OIRReader             # oir
 loci.formats.in.KLBReader             # klb
+loci.formats.in.MicroCTReader         # vff
 
 # multi-extension messes
 loci.formats.in.JEOLReader            # dat, img, par
@@ -115,6 +118,7 @@ loci.formats.in.OperettaReader        # xml, tif, tiff
 loci.formats.in.InveonReader          # hdr, ct.img, cat, ...
 loci.formats.in.CellVoyagerReader     # xml, tif
 loci.formats.in.ColumbusReader        # xml, tif
+loci.formats.in.CV7000Reader          # wpi
 
 # standard PIC reader must go last (it accepts any PIC)
 loci.formats.in.BioRadReader          # pic
@@ -144,6 +148,7 @@ loci.formats.in.LEOReader             # sxm
 loci.formats.in.JPKReader             # jpk
 loci.formats.in.NDPIReader            # ndpi
 loci.formats.in.PCORAWReader          # pcoraw
+loci.formats.in.VentanaReader         # bif
 
 # TIFF-based readers with slow isThisType
 loci.formats.in.OMETiffReader         # tif
@@ -154,11 +159,12 @@ loci.formats.in.LeicaReader           # lei, tif
 loci.formats.in.NikonReader           # nef, tif
 loci.formats.in.FluoviewReader        # tif
 loci.formats.in.PrairieReader         # xml, cfg, tif
-loci.formats.in.MetamorphReader       # stk, tif, nd
+loci.formats.in.MetamorphReader       # stk, tif, nd, scan
 loci.formats.in.MicromanagerReader    # txt, tif
 loci.formats.in.ImprovisionTiffReader # tif
 loci.formats.in.MetamorphTiffReader   # tif
 loci.formats.in.NikonTiffReader       # tif
+loci.formats.in.MikroscanTiffReader   # tif
 loci.formats.in.PhotoshopTiffReader   # tif
 loci.formats.in.FEITiffReader         # tif
 loci.formats.in.SimplePCITiffReader   # tif
@@ -189,3 +195,4 @@ loci.formats.in.HitachiReader         # txt, tif, jpg, bmp
 loci.formats.in.BrukerReader          # fid, acqp
 loci.formats.in.CanonRawReader        # cr2, crw, jpg, thm, wav
 loci.formats.in.OBFReader             # obf, msr
+loci.formats.in.BDVReader             # xml, h5

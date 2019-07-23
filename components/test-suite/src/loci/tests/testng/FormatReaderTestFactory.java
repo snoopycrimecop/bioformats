@@ -37,6 +37,7 @@ import java.util.HashMap;
 
 import loci.common.DataTools;
 import loci.formats.FileStitcher;
+import loci.formats.UnknownFormatException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -242,9 +243,28 @@ public class FormatReaderTestFactory {
     Set<String> failingIds = new LinkedHashSet<String>();
     while (!fileSet.isEmpty()) {
       String file = fileSet.iterator().next();
+      ArrayList<String> originalHandles = null;
       try {
+        originalHandles = TestTools.getHandles(true);
         reader.setId(file);
-      } catch (Exception e) {
+      }
+      catch (UnknownFormatException u) {
+        boolean validConfig = false;
+        try {
+          validConfig = FormatReaderTest.configTree.get(file) != null;
+        }
+        catch (IOException e) { }
+        if (validConfig) {
+          LOGGER.error("setId(\"{}\") failed", file, u);
+          failingIds.add(file);
+        }
+        else {
+          LOGGER.debug("Skipping file {} with unknown type", file);
+        }
+        fileSet.remove(file);
+        continue;
+      }
+      catch (Exception e) {
         LOGGER.error("setId(\"{}\") failed", file, e);
         failingIds.add(file);
         fileSet.remove(file);
@@ -270,6 +290,16 @@ public class FormatReaderTestFactory {
         fileSet.remove(file);
         try {
           reader.close();
+        }
+        catch (IOException e) { }
+        try {
+          ArrayList<String> handles = TestTools.getHandles(true);
+          if (originalHandles != null && handles.size() > originalHandles.size()) {
+            String msg = String.format("setId on %s failed to close %s files",
+              file, handles.size() - originalHandles.size());
+            LOGGER.error(msg);
+            throw new RuntimeException(msg);
+          }
         }
         catch (IOException e) { }
       }

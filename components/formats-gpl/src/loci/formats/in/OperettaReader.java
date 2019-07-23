@@ -228,7 +228,29 @@ public class OperettaReader extends FormatReader {
           reader = new MinimalTiffReader();
         }
         reader.setId(p.filename);
-        reader.openBytes(0, buf, x, y, w, h);
+        if (reader.getSizeX() >= getSizeX() && reader.getSizeY() >= getSizeY()) {
+          reader.openBytes(0, buf, x, y, w, h);
+        }
+        else {
+          LOGGER.warn("Image dimension mismatch in {}", p.filename);
+
+          // the XY dimensions of this TIFF are smaller than expected,
+          // so read the stored image into the upper left corner
+          // the bottom and right side will have a black border
+          if (x < reader.getSizeX() && y < reader.getSizeY()) {
+            int realWidth = (int) Math.min(w, reader.getSizeX() - x);
+            int realHeight = (int) Math.min(h, reader.getSizeY() - y);
+            byte[] realPixels =
+              reader.openBytes(0, x, y, realWidth, realHeight);
+
+            int bpp = FormatTools.getBytesPerPixel(getPixelType());
+            int row = realWidth * bpp;
+            int outputRow = w * bpp;
+            for (int yy=0; yy<realHeight; yy++) {
+              System.arraycopy(realPixels, yy * row, buf, yy * outputRow, row);
+            }
+          }
+        }
         reader.close();
       }
     }
@@ -415,15 +437,15 @@ public class OperettaReader extends FormatReader {
         }
 
         if (filename != null && new Location(filename).exists()) {
-          RandomAccessInputStream s =
-            new RandomAccessInputStream(filename, 16);
-          TiffParser parser = new TiffParser(s);
-          parser.setDoCaching(false);
+          try (RandomAccessInputStream s =
+            new RandomAccessInputStream(filename, 16)) {
+              TiffParser parser = new TiffParser(s);
+              parser.setDoCaching(false);
 
-          IFD firstIFD = parser.getFirstIFD();
-          ms.littleEndian = firstIFD.isLittleEndian();
-          ms.pixelType = firstIFD.getPixelType();
-          s.close();
+              IFD firstIFD = parser.getFirstIFD();
+              ms.littleEndian = firstIFD.isLittleEndian();
+              ms.pixelType = firstIFD.getPixelType();
+          }
         }
         else if (i > 0) {
           LOGGER.warn("Could not find valid TIFF file for series {}", i);
@@ -527,7 +549,8 @@ public class OperettaReader extends FormatReader {
               store.setChannelAcquisitionMode(getAcquisitionMode(planes[i][c].acqType), i, c);
             }
             if (planes[i][c].channelType != null) {
-              store.setChannelContrastMethod(getContrastMethod(planes[i][c].channelType), i, c);
+              store.setChannelContrastMethod(
+                MetadataTools.getContrastMethod(planes[i][c].channelType), i, c);
             }
             store.setChannelEmissionWavelength(
               FormatTools.getEmissionWavelength(planes[i][c].emWavelength), i, c);
@@ -755,10 +778,10 @@ public class OperettaReader extends FormatReader {
           activePlane.exWavelength = Double.parseDouble(value);
         }
         else if ("ExposureTime".equals(currentName)) {
-          activePlane.exposureTime = new Time(Double.parseDouble(value), UNITS.S);
+          activePlane.exposureTime = new Time(Double.parseDouble(value), UNITS.SECOND);
         }
         else if ("MeasurementTimeOffset".equals(currentName)) {
-          activePlane.deltaT = new Time(Double.parseDouble(value), UNITS.S);
+          activePlane.deltaT = new Time(Double.parseDouble(value), UNITS.SECOND);
         }
         else if ("AbsTime".equals(currentName)) {
           activePlane.absoluteTime = new Timestamp(value);
@@ -868,7 +891,7 @@ public class OperettaReader extends FormatReader {
     else if (mode.equalsIgnoreCase("nonconfocal")) {
       return AcquisitionMode.WIDEFIELD;
     }
-    return super.getAcquisitionMode(mode);
+    return MetadataTools.getAcquisitionMode(mode);
   }
 
 }

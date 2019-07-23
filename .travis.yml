@@ -1,3 +1,4 @@
+---
 language: java
 
 # This (sudo: false) is needed to "run on container-based infrastructure" on
@@ -12,13 +13,14 @@ cache:
   - downloads
 
 addons:
-  apt_packages:
+  apt:
+    packages:
     - git
+    - ant
 
 jdk:
-  - oraclejdk11
-  - oraclejdk8
-  - openjdk7
+  - openjdk11
+  - openjdk8
 
 env:
   - BUILD=maven
@@ -29,11 +31,12 @@ matrix:
   exclude:
   - jdk: oraclejdk11
     env: BUILD=ant
-  - jdk: openjdk7
+  - jdk: openjdk11
     env: BUILD=ant
-
-before_install:
-  - if [[ $BUILD == 'ant' ]]; then pip install --user flake8 Sphinx; fi
+  - jdk: oraclejdk8
+    env: BUILD=ant
+  - jdk: openjdk8
+    env: BUILD=maven
 
 script:
   - ./tools/test-build $BUILD
