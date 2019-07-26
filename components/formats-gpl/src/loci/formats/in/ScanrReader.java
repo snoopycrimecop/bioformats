@@ -619,10 +619,10 @@ public class ScanrReader extends FormatReader {
       store.setPlateAcquisitionMaximumFieldCount(fieldCount, 0, 0);
     }
 
+    int index = 0;
     for (int i=0; i<getSeriesCount(); i++) {
       int field = i % nFields;
       int well = i / nFields;
-      int index = well;
       while (wellNumbers.get(index) == null && index < wellNumbers.size()) {
         index++;
       }
@@ -651,6 +651,9 @@ public class ScanrReader extends FormatReader {
       store.setImageName(name, i);
 
       store.setPlateAcquisitionWellSampleRef(wellSample, 0, 0, i);
+      if (field == nFields - 1) {
+        index++;
+      }
     }
 
     if (getMetadataOptions().getMetadataLevel() != MetadataLevel.MINIMUM) {
@@ -703,8 +706,8 @@ public class ScanrReader extends FormatReader {
       String row = wellRows > 26 ? "Number" : "Letter";
       String col = wellRows > 26 ? "Letter" : "Number";
 
-      store.setPlateRowNamingConvention(getNamingConvention(row), 0);
-      store.setPlateColumnNamingConvention(getNamingConvention(col), 0);
+      store.setPlateRowNamingConvention(MetadataTools.getNamingConvention(row), 0);
+      store.setPlateColumnNamingConvention(MetadataTools.getNamingConvention(col), 0);
       store.setPlateName(plateName, 0);
     }
   }

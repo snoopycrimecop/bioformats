@@ -8,7 +8,7 @@
   <parent>
     <groupId>idr</groupId>
     <artifactId>pom-bio-formats</artifactId>
-    <version>0.5.4-SNAPSHOT</version>
+    <version>0.6.0-SNAPSHOT</version>
     <relativePath>../..</relativePath>
   </parent>
 
@@ -34,7 +34,7 @@
       <version>${ome-common.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.openmicroscopy</groupId>
+      <groupId>${ome-model.group}</groupId>
       <artifactId>ome-xml</artifactId>
       <version>${ome-model.version}</version>
     </dependency>

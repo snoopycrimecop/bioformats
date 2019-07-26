@@ -851,6 +851,9 @@ public class ZeissCZIReader extends FormatReader {
       ms0.sizeY = firstY;
       prestitched = true;
     }
+    else if (allowAutostitching() && prestitched == null && mosaics > 1) {
+      prestitched = mosaics == seriesCount && mosaics == calculatedSeries;
+    }
 
     if (ms0.imageCount * seriesCount > planes.size() * scanDim &&
       planes.size() > 0)
@@ -1186,7 +1189,13 @@ public class ZeissCZIReader extends FormatReader {
             int seriesId = p.coreIndex + 1;
             //add padding to make sure the original metadata table is organized properly in ImageJ
             String sIndex = String.format("Positions|Series %0" + nameWidth + "d|", seriesId);
-            addSeriesMetaList(sIndex, dimension.start);
+            if (maxResolution == 0) {
+              addSeriesMetaList(sIndex, dimension.start);
+            }
+            else {
+              // don't store the start value for every tile in a pyramid
+              addSeriesMeta(sIndex, dimension.start);
+            }
             break;
         }
       }
@@ -1216,6 +1225,7 @@ public class ZeissCZIReader extends FormatReader {
     store.setInstrumentID(MetadataTools.createLSID("Instrument", 0), 0);
 
     int indexLength = String.valueOf(getSeriesCount()).length();
+    int positionIndex = -1;
     for (int i=0; i<getSeriesCount(); i++) {
       store.setImageInstrumentRef(MetadataTools.createLSID("Instrument", 0), i);
       if (acquiredDate != null) {
@@ -1295,7 +1305,7 @@ public class ZeissCZIReader extends FormatReader {
             new Double(correctionCollar), i);
         }
         if (medium != null) {
-          store.setObjectiveSettingsMedium(getMedium(medium), i);
+          store.setObjectiveSettingsMedium(MetadataTools.getMedium(medium), i);
         }
         if (refractiveIndex != null) {
           store.setObjectiveSettingsRefractiveIndex(
@@ -1310,8 +1320,9 @@ public class ZeissCZIReader extends FormatReader {
           startTime = t.asInstant().getMillis() / 1000d;
       }
 
+      boolean firstPlane = true;
       for (int plane=0; plane<getImageCount(); plane++) {
-        Coordinate coordinate = new Coordinate(i, plane, getImageCount());
+        Coordinate coordinate = new Coordinate(seriesToCoreIndex(i), plane, getImageCount());
         ArrayList<Integer> index = indexIntoPlanes.get(coordinate);
         if (index == null) {
           continue;
@@ -1322,48 +1333,131 @@ public class ZeissCZIReader extends FormatReader {
           startTime = p.timestamp;
         }
 
-        if (p.stageX != null) {
-          store.setPlanePositionX(p.stageX, i, plane);
-        }
-        else if (positionsX != null && i < positionsX.length &&
-          positionsX[i] != null)
-        {
-          store.setPlanePositionX(positionsX[i], i, plane);
-        }
-        else {
-          store.setPlanePositionX(new Length(p.col, UNITS.REFERENCEFRAME), i, plane);
+        if (firstPlane) {
+          if (!hasFlattenedResolutions()) {
+            positionIndex = i;
+          }
+          else if (p.resolutionIndex == 0) {
+            positionIndex++;
+          }
+          firstPlane = false;
         }
 
-        if (p.stageY != null) {
-          store.setPlanePositionY(p.stageY, i, plane);
-        }
-        else if (positionsY != null && i < positionsY.length &&
-          positionsY[i] != null)
-        {
-          store.setPlanePositionY(positionsY[i], i, plane);
-        }
-        else {
-          store.setPlanePositionY(new Length(p.row, UNITS.REFERENCEFRAME), i, plane);
+        Double minStageX = null;
+        Double maxStageX = null;
+        Double minStageY = null;
+        Double maxStageY = null;
+        for (Integer q : index) {
+          SubBlock currentPlane = planes.get(q);
+          if (currentPlane == null) continue;
+          if (currentPlane.stageX != null) {
+            if (minStageX == null ||
+              currentPlane.stageX.value().doubleValue() < minStageX)
+            {
+              minStageX = currentPlane.stageX.value().doubleValue();
+            }
+            if (maxStageX == null ||
+              currentPlane.stageX.value().doubleValue() > maxStageX)
+            {
+              maxStageX = currentPlane.stageX.value().doubleValue();
+            }
+          }
+          if (currentPlane.stageY != null) {
+            if (minStageY == null ||
+              currentPlane.stageY.value().doubleValue() < minStageY)
+            {
+              minStageY = currentPlane.stageY.value().doubleValue();
+            }
+            if (maxStageY == null ||
+              currentPlane.stageY.value().doubleValue() > maxStageY)
+            {
+              maxStageY = currentPlane.stageY.value().doubleValue();
+            }
+          }
         }
 
+        // if the XML-defined positions are used,
+        // assign the same position to each resolution in a pyramid
+
+        Length x = null;
+        if (minStageX != null && maxStageX != null) {
+          double diff = (maxStageX - minStageX) / 2;
+          x = new Length(minStageX + diff, UNITS.MICROMETER);
+          if (positionsX != null) {
+            positionsX[positionIndex] = x;
+          }
+        }
+        else if (positionsX != null && positionIndex < positionsX.length &&
+          positionsX[positionIndex] != null)
+        {
+          x = positionsX[positionIndex];
+        }
+        else if (p.stageX != null) {
+          x = p.stageX;
+        }
+        else {
+          x = new Length(p.col, UNITS.REFERENCEFRAME);
+        }
+        if (x != null) {
+          store.setPlanePositionX(x, i, plane);
+          if (plane == 0) {
+            store.setStageLabelX(x, i);
+          }
+        }
+
+        Length y = null;
+        if (minStageY != null && maxStageY != null) {
+          double diff = (maxStageY - minStageY) / 2;
+          y = new Length(minStageY + diff, UNITS.MICROMETER);
+          if (positionsY != null) {
+            positionsY[positionIndex] = y;
+          }
+        }
+        else if (positionsY != null && positionIndex < positionsY.length &&
+          positionsY[positionIndex] != null)
+        {
+          y = positionsY[positionIndex];
+        }
+        else if (p.stageY != null) {
+          y = p.stageY;
+        }
+        else {
+          y = new Length(p.row, UNITS.REFERENCEFRAME);
+        }
+        if (y != null) {
+          store.setPlanePositionY(y, i, plane);
+          if (plane == 0) {
+            store.setStageLabelY(y, i);
+          }
+        }
+
+        Length z = null;
         if (p.stageZ != null) {
-          store.setPlanePositionZ(p.stageZ, i, plane);
+          z = p.stageZ;
         }
-        else if (positionsZ != null && i < positionsZ.length) {
+        else if (positionsZ != null && positionIndex < positionsZ.length) {
           int zIndex = getZCTCoords(plane)[0];
-          if (positionsZ[i] != null) {
+          if (positionsZ[positionIndex] != null) {
             if (zStep != null) {
-              double value = positionsZ[i].value(zStep.unit()).doubleValue();
+              double value = positionsZ[positionIndex].value(zStep.unit()).doubleValue();
               if (zStep != null) {
                 value += zIndex * zStep.value().doubleValue();
               }
-              Length pos = new Length(value, zStep.unit());
-              store.setPlanePositionZ(pos, i, plane);
+              z = new Length(value, zStep.unit());
             }
             else {
-              store.setPlanePositionZ(positionsZ[i], i, plane);
+              z = positionsZ[positionIndex];
             }
           }
+        }
+        if (z != null) {
+          store.setPlanePositionZ(z, i, plane);
+          if (plane == 0) {
+            store.setStageLabelZ(z, i);
+          }
+        }
+        if (plane == 0 && (x != null || y != null || z != null)) {
+          store.setStageLabelName("Scene position #" + i, i);
         }
 
         if (p.timestamp != null) {
@@ -1379,7 +1473,7 @@ public class ZeissCZIReader extends FormatReader {
           // otherwise use the timepoint index, to prevent incorrect timestamping of channels
           int t = getZCTCoords(plane)[2];
           if (timestamps.get(t) != null) {
-            store.setPlaneDeltaT(new Time(timestamps.get(t), UNITS.S), i, plane);
+            store.setPlaneDeltaT(new Time(timestamps.get(t), UNITS.SECOND), i, plane);
           }
         }
         if (p.exposureTime != null) {
@@ -1394,6 +1488,12 @@ public class ZeissCZIReader extends FormatReader {
               new Time(channels.get(channel).exposure, UNITS.SECOND), i, plane);
           }
         }
+      }
+
+      if (firstPlane && core.get(i).resolutionCount > 1 &&
+        hasFlattenedResolutions())
+      {
+        positionIndex++;
       }
 
       for (int c=0; c<getEffectiveSizeC(); c++) {
@@ -1463,7 +1563,7 @@ public class ZeissCZIReader extends FormatReader {
           store.setDetectorSettingsID(detector, i, c);
 
           if (c < binnings.size()) {
-            store.setDetectorSettingsBinning(getBinning(binnings.get(c)), i, c);
+            store.setDetectorSettingsBinning(MetadataTools.getBinning(binnings.get(c)), i, c);
           }
           if (c < channels.size()) {
             store.setDetectorSettingsGain(channels.get(c).gain, i, c);
@@ -2028,11 +2128,21 @@ public class ZeissCZIReader extends FormatReader {
             String y = position.getAttribute("Y");
             String z = position.getAttribute("Z");
             if (nextPosition < positionsX.length && positionsX[nextPosition] == null) {
-              positionsX[nextPosition] = new Length(DataTools.parseDouble(x), UNITS.MICROM);
-              positionsY[nextPosition] = new Length(DataTools.parseDouble(y), UNITS.MICROM);
-              positionsZ[nextPosition] = new Length(DataTools.parseDouble(z), UNITS.MICROM);
+              positionsX[nextPosition] = new Length(DataTools.parseDouble(x), UNITS.MICROMETER);
+              positionsY[nextPosition] = new Length(DataTools.parseDouble(y), UNITS.MICROMETER);
+              positionsZ[nextPosition] = new Length(DataTools.parseDouble(z), UNITS.MICROMETER);
               nextPosition++;
             }
+          }
+          if (positions.getLength() == 0 && (mosaics <= 1 || (prestitched != null && prestitched))) {
+            positions = scene.getElementsByTagName("CenterPosition");
+            if (positions.getLength() > 0) {
+              Element position = (Element) positions.item(0);
+              String[] pos = position.getTextContent().split(",");
+              positionsX[nextPosition] = new Length(DataTools.parseDouble(pos[0]), UNITS.MICROM);
+              positionsY[nextPosition] = new Length(DataTools.parseDouble(pos[1]), UNITS.MICROM);
+            }
+            nextPosition++;
           }
         }
       }
@@ -2060,11 +2170,11 @@ public class ZeissCZIReader extends FormatReader {
 
           String illumination = getFirstNodeValue(channel, "IlluminationType");
           if (illumination != null) {
-            channels.get(i).illumination = getIlluminationType(illumination);
+            channels.get(i).illumination = MetadataTools.getIlluminationType(illumination);
           }
           String acquisition = getFirstNodeValue(channel, "AcquisitionMode");
           if (acquisition != null) {
-            channels.get(i).acquisitionMode = getAcquisitionMode(acquisition);
+            channels.get(i).acquisitionMode = MetadataTools.getAcquisitionMode(acquisition);
           }
 
           Element detectorSettings = getFirstNode(channel, "DetectorSettings");
@@ -2139,7 +2249,7 @@ public class ZeissCZIReader extends FormatReader {
 
         String microscopeType = getFirstNodeValue(microscope, "Type");
         if (microscopeType != null) {
-          store.setMicroscopeType(getMicroscopeType(microscopeType), 0);
+          store.setMicroscopeType(MetadataTools.getMicroscopeType(microscopeType), 0);
         }
       }
 
@@ -2261,7 +2371,7 @@ public class ZeissCZIReader extends FormatReader {
 
           String detectorType = getFirstNodeValue(detector, "Type");
           if (detectorType != null && !detectorType.equals("")) {
-            store.setDetectorType(getDetectorType(detectorType), 0, detectorIndex);
+            store.setDetectorType(MetadataTools.getDetectorType(detectorType), 0, detectorIndex);
           }
         }
       }
@@ -2363,7 +2473,7 @@ public class ZeissCZIReader extends FormatReader {
 
           String filterType = getFirstNodeValue(filter, "Type");
           if (filterType != null) {
-            store.setFilterType(getFilterType(filterType), 0, i);
+            store.setFilterType(MetadataTools.getFilterType(filterType), 0, i);
           }
           store.setFilterFilterWheel(
             getFirstNodeValue(filter, "FilterWheel"), 0, i);
@@ -2475,7 +2585,7 @@ public class ZeissCZIReader extends FormatReader {
             }
           }
           else if (id.equals("Z")) {
-            zStep = FormatTools.createLength(size, UNITS.MICROM);
+            zStep = FormatTools.createLength(size, UNITS.MICROMETER);
             for (int series=0; series<getSeriesCount(); series++) {
               store.setPixelsPhysicalSizeZ(zStep, series);
             }
@@ -2533,7 +2643,7 @@ public class ZeissCZIReader extends FormatReader {
           String illumination = getFirstNodeValue(channel, "IlluminationType");
 
           if (illumination != null) {
-            channels.get(i).illumination = getIlluminationType(illumination);
+            channels.get(i).illumination = MetadataTools.getIlluminationType(illumination);
           }
         }
       }
@@ -2771,8 +2881,8 @@ public class ZeissCZIReader extends FormatReader {
             objective.getAttribute("UniqueName"), 0, i);
 
           String immersion = getFirstNodeValue(objective, "Immersions");
-          store.setObjectiveImmersion(getImmersion(immersion), 0, i);
-          store.setObjectiveCorrection(getCorrection("Other"), 0, i);
+          store.setObjectiveImmersion(MetadataTools.getImmersion(immersion), 0, i);
+          store.setObjectiveCorrection(MetadataTools.getCorrection("Other"), 0, i);
 
           String magnification = getFirstNodeValue(objective, "Magnification");
           String na = getFirstNodeValue(objective, "NumericalAperture");
@@ -3054,7 +3164,7 @@ public class ZeissCZIReader extends FormatReader {
         String bin = getFirstNodeValue(detector, "Binning");
         if (bin != null) {
           bin = bin.replaceAll(",", "x");
-          Binning binning = getBinning(bin);
+          Binning binning = MetadataTools.getBinning(bin);
 
           if (model != null && model.equals(cameraModel)) {
             for (int image=0; image<getSeriesCount(); image++) {
@@ -3390,10 +3500,10 @@ public class ZeissCZIReader extends FormatReader {
 
         String correction = getFirstNodeValue(objective, "Correction");
         if (correction != null) {
-          store.setObjectiveCorrection(getCorrection(correction), 0, i);
+          store.setObjectiveCorrection(MetadataTools.getCorrection(correction), 0, i);
         }
         store.setObjectiveImmersion(
-          getImmersion(getFirstNodeValue(objective, "Immersion")), 0, i);
+          MetadataTools.getImmersion(getFirstNodeValue(objective, "Immersion")), 0, i);
 
         String lensNA = getFirstNodeValue(objective, "LensNA");
         if (lensNA != null) {
@@ -3709,7 +3819,13 @@ public class ZeissCZIReader extends FormatReader {
           options.height = directoryEntry.dimensionEntries[1].storedSize;
           options.maxBytes = options.width * options.height *
             getRGBChannelCount() * bytesPerPixel;
-          data = new JPEGXRCodec().decompress(data, options);
+          try {
+            data = new JPEGXRCodec().decompress(data, options);
+          }
+          catch (FormatException e) {
+            LOGGER.warn("Could not decompress block; some pixels may be 0", e);
+            data = new byte[options.maxBytes];
+          }
           break;
         case 104: // camera-specific packed pixels
           data = decode12BitCamera(data, options.maxBytes);
@@ -3789,15 +3905,15 @@ public class ZeissCZIReader extends FormatReader {
               if (text != null) {
                 if (tagNode.getNodeName().equals("StageXPosition")) {
                   final Double number = Double.valueOf(text);
-                  stageX = new Length(number, UNITS.REFERENCEFRAME);
+                  stageX = new Length(number, UNITS.MICROM);
                 }
                 else if (tagNode.getNodeName().equals("StageYPosition")) {
                   final Double number = Double.valueOf(text);
-                  stageY = new Length(number, UNITS.REFERENCEFRAME);
+                  stageY = new Length(number, UNITS.MICROM);
                 }
                 else if (tagNode.getNodeName().equals("FocusPosition")) {
                   final Double number = Double.valueOf(text);
-                  stageZ = new Length(number, UNITS.REFERENCEFRAME);
+                  stageZ = new Length(number, UNITS.MICROM);
                 }
                 else if (tagNode.getNodeName().equals("AcquisitionTime")) {
                   Timestamp t = Timestamp.valueOf(text);
