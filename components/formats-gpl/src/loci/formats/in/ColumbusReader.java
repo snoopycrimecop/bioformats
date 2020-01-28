@@ -503,6 +503,12 @@ public class ColumbusReader extends FormatReader {
         else if (name.equals("FieldID")) {
           p.field = Integer.parseInt(value) - 1;
         }
+        else if (name.equals("PlaneID")) {
+          int planeID = Integer.parseInt(value) - 1;
+          if (planeID > p.field) {
+            p.field = planeID;
+          }
+        }
         else if (name.equals("TimepointID")) {
           p.timepoint = Integer.parseInt(value) - 1;
           if (p.timepoint == 0) {
