@@ -410,6 +410,7 @@ public class ScreenReader extends FormatReader {
         ClassList<IFormatReader> chosenReaders =
           new ClassList<IFormatReader>(IFormatReader.class);
         chosenReaders.addClass(chosenReader);
+        reader.close();
         stitcher.setReaderClassList(chosenReaders);
         // Re-initialize
         reader.setId(files[well][0]);
