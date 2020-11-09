@@ -190,7 +190,9 @@ public class ScreenReader extends FormatReader {
     int fileIndex = fileIndexes[spotIndex][no][0];
     int planeIndex = fileIndexes[spotIndex][no][1];
     reader.setId(files[spotIndex][fileIndex]);
-    return reader.openBytes(planeIndex, buf, x, y, w, h);
+    buf = reader.openBytes(planeIndex, buf, x, y, w, h);
+    reader.close();
+    return buf;
   }
 
   /* @see loci.formats.IFormatReader#getSeriesUsedFiles(boolean) */
