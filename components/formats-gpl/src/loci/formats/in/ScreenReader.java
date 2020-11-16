@@ -189,8 +189,12 @@ public class ScreenReader extends FormatReader {
     int spotIndex = seriesMap.get(getCoreIndex());
     int fileIndex = fileIndexes[spotIndex][no][0];
     int planeIndex = fileIndexes[spotIndex][no][1];
-    reader.setId(files[spotIndex][fileIndex]);
-    return reader.openBytes(planeIndex, buf, x, y, w, h);
+    try {
+      reader.setId(files[spotIndex][fileIndex]);
+      return reader.openBytes(planeIndex, buf, x, y, w, h);
+    } finally {
+      reader.close();
+    }
   }
 
   /* @see loci.formats.IFormatReader#getSeriesUsedFiles(boolean) */
@@ -410,6 +414,7 @@ public class ScreenReader extends FormatReader {
         ClassList<IFormatReader> chosenReaders =
           new ClassList<IFormatReader>(IFormatReader.class);
         chosenReaders.addClass(chosenReader);
+        reader.close();
         stitcher.setReaderClassList(chosenReaders);
         // Re-initialize
         reader.setId(files[well][0]);
