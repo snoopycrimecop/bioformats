@@ -33,7 +33,7 @@ jobs:
       - name: Build
         run: mvn ${{ env.maven_commands }}
   deploy:
-    if: contains('refs/heads/develop', github.ref)
+    if: contains('refs/heads/master', github.ref)
     needs: build
     runs-on: ubuntu-latest
     steps:
