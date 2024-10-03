@@ -86,6 +86,7 @@ public class TissuegnosticsReader extends FormatReader {
   private int[] scaleFactor;
   private int[][] tileRangeX;
   private int[][] tileRangeY;
+  private Integer[][] zSteps;
 
   // -- Constructor --
 
@@ -114,6 +115,7 @@ public class TissuegnosticsReader extends FormatReader {
       scaleFactor = null;
       tileRangeX = null;
       tileRangeY = null;
+      zSteps = null;
     }
   }
 
@@ -166,7 +168,7 @@ public class TissuegnosticsReader extends FormatReader {
     Connection conn = openConnection(getDBFile());
     try {
       PreparedStatement tiles = conn.prepareStatement(
-        "SELECT data, compression, row, column FROM images WHERE level=? AND row>=? AND row<=? AND column>=? AND column<=? AND channel=?"
+        "SELECT data, compression, row, column FROM images WHERE level=? AND row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column DESC"
       );
       // TODO: account for possiblity of overlap
 
@@ -183,7 +185,11 @@ public class TissuegnosticsReader extends FormatReader {
       tiles.setInt(3, endRow);
       tiles.setInt(4, startCol);
       tiles.setInt(5, endCol);
-      tiles.setInt(6, getZCTCoords(no)[1] + 1);
+
+      int[] zct = getZCTCoords(no);
+      tiles.setInt(6, zct[1] + 1);
+      tiles.setInt(7, zct[0] > 0 ? 1 : 0);
+      tiles.setInt(8, zSteps[regionIndex][zct[0]]);
 
       // upper left corner of full resolution,
       // in pixels relative to full canvas
@@ -283,6 +289,7 @@ public class TissuegnosticsReader extends FormatReader {
     scaleFactor = new int[pixelsFiles.size()];
     tileRangeX = new int[2][pixelsFiles.size()];
     tileRangeY = new int[2][pixelsFiles.size()];
+    zSteps = new Integer[pixelsFiles.size()][];
 
     Arrays.fill(tileRangeX[0], Integer.MAX_VALUE);
     Arrays.fill(tileRangeY[0], Integer.MAX_VALUE);
@@ -351,7 +358,7 @@ public class TissuegnosticsReader extends FormatReader {
         }
 
         PreparedStatement channelQuery = conn.prepareStatement(
-          "SELECT id, name, color, save_16bit, excitation_wavelength, emission_wavelength FROM channels"
+          "SELECT id, name, color, save_16bit, excitation_wavelength, emission_wavelength FROM channels ORDER BY id"
         );
         ResultSet channels = channelQuery.executeQuery();
         while (channels.next()) {
@@ -364,6 +371,19 @@ public class TissuegnosticsReader extends FormatReader {
             m.pixelType = FormatTools.UINT16;
           }
         }
+
+        PreparedStatement zQuery = conn.prepareStatement(
+          "SELECT DISTINCT is_zstack,z_position FROM images WHERE level=0 ORDER BY is_zstack,z_position"
+        );
+        ResultSet zs = zQuery.executeQuery();
+        ArrayList<Integer> tmpZ = new ArrayList<Integer>();
+        while (zs.next()) {
+          boolean isZ = zs.getBoolean(1);
+          int zPos = zs.getInt(2);
+
+          tmpZ.add(zPos);
+        }
+        zSteps[i] = tmpZ.toArray(new Integer[tmpZ.size()]);
       }
       catch (SQLException e) {
         LOGGER.warn("Failed to initialize", e);
@@ -377,7 +397,7 @@ public class TissuegnosticsReader extends FormatReader {
         }
       }
 
-      m.sizeZ = 1;
+      m.sizeZ = zSteps[i].length;
       m.sizeT = 1;
       m.imageCount = m.sizeZ * m.sizeC * m.sizeT;
 
