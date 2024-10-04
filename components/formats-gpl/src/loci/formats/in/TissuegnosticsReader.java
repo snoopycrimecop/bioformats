@@ -418,6 +418,7 @@ public class TissuegnosticsReader extends FormatReader {
       }
 
       m.dimensionOrder = "XYCZT";
+      m.littleEndian = true;
 
       core.add(m);
       for (int r=1; r<m.resolutionCount; r++) {
