@@ -58,6 +58,7 @@ import loci.formats.meta.MetadataStore;
 import ome.units.UNITS;
 import ome.units.quantity.Length;
 import ome.units.quantity.Time;
+import ome.xml.model.primitives.Color;
 import ome.xml.model.primitives.NonNegativeInteger;
 import ome.xml.model.primitives.PositiveInteger;
 import ome.xml.model.primitives.Timestamp;
@@ -76,6 +77,10 @@ public class TissuegnosticsReader extends FormatReader {
 
   private static final Logger LOGGER =
     LoggerFactory.getLogger(TissuegnosticsReader.class);
+
+  // per specification, wavelengths outside this range should be ignored
+  private static final int WAVE_MIN = 300;
+  private static final int WAVE_MAX = 800;
 
   private List<String> pixelsFiles = new ArrayList<String>();
   private List<ScanRegion> regions = new ArrayList<ScanRegion>();
@@ -387,12 +392,20 @@ public class TissuegnosticsReader extends FormatReader {
         while (channels.next()) {
           m.sizeC++;
 
-          // TODO: save channel name, color, wavelengths
+          Channel ch = new Channel();
+          ch.id = channels.getInt(1);
+          ch.name = channels.getString(2);
+          ch.color = channels.getInt(3);
 
           boolean save16 = channels.getBoolean(4);
           if (save16) {
             m.pixelType = FormatTools.UINT16;
           }
+
+          ch.exWave = channels.getInt(5);
+          ch.emWave = channels.getInt(6);
+
+          regions.get(startRegionIndex).channels.add(ch);
         }
       }
       catch (SQLException e) {
@@ -466,6 +479,19 @@ public class TissuegnosticsReader extends FormatReader {
 
       store.setPixelsPhysicalSizeX(FormatTools.getPhysicalSizeX(physicalX), imageIndex);
       store.setPixelsPhysicalSizeY(FormatTools.getPhysicalSizeY(physicalY), imageIndex);
+
+      for (int c=0; c<region.channels.size(); c++) {
+        Channel ch = region.channels.get(c);
+        store.setChannelName(ch.name, imageIndex, c);
+
+        if (ch.emWave >= WAVE_MIN && ch.emWave <= WAVE_MAX) {
+          store.setChannelEmissionWavelength(FormatTools.getWavelength((double) ch.emWave), imageIndex, c);
+        }
+        if (ch.exWave >= WAVE_MIN && ch.exWave <= WAVE_MAX) {
+          store.setChannelExcitationWavelength(FormatTools.getWavelength((double) ch.exWave), imageIndex, c);
+        }
+        store.setChannelColor(ch.getColor(), imageIndex, c);
+      }
 
       i += core.get(imageIndex).sizeT;
     }
@@ -558,6 +584,7 @@ public class TissuegnosticsReader extends FormatReader {
     public int[] tileRangeY = new int[] {Integer.MAX_VALUE, 0};
     public Integer[] zSteps;
     public int timepoint;
+    public List<Channel> channels = new ArrayList<Channel>();
 
     public void parseJSON() {
       // "Rows" and "Columns" in the JSON metadata here
@@ -569,6 +596,23 @@ public class TissuegnosticsReader extends FormatReader {
       scaleFactor = regionMetadata.getInt("CacheStep");
     }
 
+  }
+
+  class Channel {
+    public int id;
+    public String name;
+    public int color;
+    public int exWave;
+    public int emWave;
+
+    /** Color returned by DB is ARGB, OME model is RGBA. */
+    public Color getColor() {
+      int alpha = (color >> 24) & 0xff;
+      int red = (color >> 16) & 0xff;
+      int green = (color >> 8) & 0xff;
+      int blue = color & 0xff;
+      return new Color(red, green, blue, alpha);
+    }
   }
 
 }
