@@ -78,15 +78,7 @@ public class TissuegnosticsReader extends FormatReader {
     LoggerFactory.getLogger(TissuegnosticsReader.class);
 
   private List<String> pixelsFiles = new ArrayList<String>();
-  private int[] fullResolutionCoreIndex;
-  private int[] tileSizeX;
-  private int[] tileSizeY;
-  private int[] overlapX;
-  private int[] overlapY;
-  private int[] scaleFactor;
-  private int[][] tileRangeX;
-  private int[][] tileRangeY;
-  private Integer[][] zSteps;
+  private List<ScanRegion> regions = new ArrayList<ScanRegion>();
 
   // -- Constructor --
 
@@ -107,15 +99,7 @@ public class TissuegnosticsReader extends FormatReader {
     super.close(fileOnly);
     if (!fileOnly) {
       pixelsFiles.clear();
-      fullResolutionCoreIndex = null;
-      tileSizeX = null;
-      tileSizeY = null;
-      overlapX = null;
-      overlapY = null;
-      scaleFactor = null;
-      tileRangeX = null;
-      tileRangeY = null;
-      zSteps = null;
+      regions.clear();
     }
   }
 
@@ -123,16 +107,28 @@ public class TissuegnosticsReader extends FormatReader {
   @Override
   public int getOptimalTileWidth() {
     FormatTools.assertId(currentId, true, 1);
-    int region = getRegionIndex();
-    return tileSizeX[region] / (int) Math.pow(scaleFactor[region], getLevel());
+    try {
+      ScanRegion region = getRegion();
+      return region.tileSizeX / (int) Math.pow(region.scaleFactor, getLevel());
+    }
+    catch (FormatException e) {
+      LOGGER.warn("Could not get optimal tile width", e);
+    }
+    return super.getOptimalTileWidth();
   }
 
   /* @see loci.formats.IFormatReader#getOptimalTileHeight() */
   @Override
   public int getOptimalTileHeight() {
     FormatTools.assertId(currentId, true, 1);
-    int region = getRegionIndex();
-    return tileSizeY[region] / (int) Math.pow(scaleFactor[region], getLevel());
+    try {
+      ScanRegion region = getRegion();
+      return region.tileSizeY / (int) Math.pow(region.scaleFactor, getLevel());
+    }
+    catch (FormatException e) {
+      LOGGER.warn("Could not get optimal tile height", e);
+    }
+    return super.getOptimalTileHeight();
   }
 
   /* @see loci.formats.IFormatReader#getSeriesUsedFiles(boolean) */
@@ -143,7 +139,12 @@ public class TissuegnosticsReader extends FormatReader {
     ArrayList<String> files = new ArrayList<String>();
     files.add(getCurrentFile());
     if (!noPixels) {
-      files.add(getDBFile());
+      try {
+        files.add(getRegion().file);
+      }
+      catch (FormatException e) {
+        LOGGER.warn("Could not get file", e);
+      }
     }
     return files.toArray(new String[files.size()]);
   }
@@ -159,50 +160,52 @@ public class TissuegnosticsReader extends FormatReader {
 
     Arrays.fill(buf, getFillColor());
 
-    int regionIndex = getRegionIndex();
+    int[] zct = getZCTCoords(no);
+    ScanRegion region = getRegion(zct[2]);
     int bpp = FormatTools.getBytesPerPixel(getPixelType());
     int level = getLevel();
-    int scale = (int) Math.pow(scaleFactor[regionIndex], level);
+    int scale = (int) Math.pow(region.scaleFactor, level);
 
     Region dest = new Region(x, y, w, h);
-    Connection conn = openConnection(getDBFile());
+    Connection conn = openConnection(region.file);
     try {
       PreparedStatement tiles = conn.prepareStatement(
-        "SELECT data, compression, row, column FROM images WHERE level=? AND row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column DESC"
+        "SELECT data, compression, row, column FROM images WHERE region=? AND level=? AND " +
+        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column DESC"
       );
       // TODO: account for possiblity of overlap
 
-      int rowOffset = (int) Math.floor((double) tileRangeY[0][regionIndex] / scale);
-      int colOffset = (int) Math.floor((double) tileRangeX[0][regionIndex] / scale);
+      int rowOffset = (int) Math.floor((double) region.tileRangeY[0] / scale);
+      int colOffset = (int) Math.floor((double) region.tileRangeX[0] / scale);
 
-      int startRow = (int) Math.floor((double) y / tileSizeY[regionIndex]) + rowOffset;
-      int startCol = (int) Math.floor((double) x / tileSizeX[regionIndex]) + colOffset;
-      int endRow = (int) Math.ceil((double) (y + h) / tileSizeY[regionIndex]) + rowOffset;
-      int endCol = (int) Math.ceil((double) (x + w) / tileSizeX[regionIndex]) + colOffset;
+      int startRow = (int) Math.floor((double) y / region.tileSizeY) + rowOffset;
+      int startCol = (int) Math.floor((double) x / region.tileSizeX) + colOffset;
+      int endRow = (int) Math.ceil((double) (y + h) / region.tileSizeY) + rowOffset;
+      int endCol = (int) Math.ceil((double) (x + w) / region.tileSizeX) + colOffset;
 
-      tiles.setInt(1, level);
-      tiles.setInt(2, startRow);
-      tiles.setInt(3, endRow);
-      tiles.setInt(4, startCol);
-      tiles.setInt(5, endCol);
+      tiles.setInt(1, region.id);
+      tiles.setInt(2, level);
+      tiles.setInt(3, startRow);
+      tiles.setInt(4, endRow);
+      tiles.setInt(5, startCol);
+      tiles.setInt(6, endCol);
 
-      int[] zct = getZCTCoords(no);
-      tiles.setInt(6, zct[1] + 1);
-      tiles.setInt(7, zct[0] > 0 ? 1 : 0);
-      tiles.setInt(8, zSteps[regionIndex][zct[0]]);
+      tiles.setInt(7, zct[1] + 1);
+      tiles.setInt(8, zct[0] > 0 ? 1 : 0);
+      tiles.setInt(9, region.zSteps[zct[0]]);
 
       // upper left corner of full resolution,
       // in pixels relative to full canvas
-      int fullResUpperLeftX = tileRangeX[0][regionIndex] * tileSizeX[regionIndex];
-      int fullResUpperLeftY = tileRangeY[0][regionIndex] * tileSizeY[regionIndex];
+      int fullResUpperLeftX = region.tileRangeX[0] * region.tileSizeX;
+      int fullResUpperLeftY = region.tileRangeY[0] * region.tileSizeY;
 
       // upper left corner of current resolution,
       // in pixels relative to current resolution canvas
       int currentResUpperLeftX = fullResUpperLeftX / scale;
       int currentResUpperLeftY = fullResUpperLeftY / scale;
 
-      int relativeUpperLeftX = currentResUpperLeftX % tileSizeX[regionIndex];
-      int relativeUpperLeftY = currentResUpperLeftY % tileSizeY[regionIndex];
+      int relativeUpperLeftX = currentResUpperLeftX % region.tileSizeX;
+      int relativeUpperLeftY = currentResUpperLeftY % region.tileSizeY;
 
       ResultSet subsetTiles = tiles.executeQuery();
       while (subsetTiles.next()) {
@@ -216,14 +219,14 @@ public class TissuegnosticsReader extends FormatReader {
 
         CodecOptions options = new CodecOptions();
         options.bitsPerSample = bpp * 8;
-        options.width = tileSizeX[regionIndex];
-        options.height = tileSizeY[regionIndex];
+        options.width = region.tileSizeX;
+        options.height = region.tileSizeY;
 
         Codec codec = getCodec(compression);
         byte[] tile = codec.decompress(data, options);
 
-        int relativeColumn = column - (int) Math.floor((double) tileRangeX[0][regionIndex] / scale);
-        int relativeRow = row - (int) Math.floor((double) tileRangeY[0][regionIndex] / scale);
+        int relativeColumn = column - (int) Math.floor((double) region.tileRangeX[0] / scale);
+        int relativeRow = row - (int) Math.floor((double) region.tileRangeY[0] / scale);
         relativeColumn *= options.width;
         relativeRow *= options.height;
 
@@ -237,7 +240,7 @@ public class TissuegnosticsReader extends FormatReader {
 
         int outputRowLen = w * bpp;
         int intersectionX = (int) Math.max(0, dest.x - src.x);
-        int rowLen = bpp * (int) Math.min(intersection.width, tileSizeX[regionIndex]);
+        int rowLen = bpp * (int) Math.min(intersection.width, region.tileSizeX);
 
         int outputRow = intersection.y - y;
         int outputCol = intersection.x - x;
@@ -247,7 +250,7 @@ public class TissuegnosticsReader extends FormatReader {
           int destChannelOffset = c * w * h * bpp;
           for (int copyRow=0; copyRow<intersection.height; copyRow++) {
             int realRow = copyRow + intersection.y - src.y;
-            int inputOffset = bpp * (realRow * tileSizeX[regionIndex] + intersectionX);
+            int inputOffset = bpp * (realRow * region.tileSizeX + intersectionX);
             System.arraycopy(tile, srcChannelOffset + inputOffset,
               buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
           }
@@ -280,35 +283,31 @@ public class TissuegnosticsReader extends FormatReader {
 
     core.clear();
 
-    JSONObject[] regionMetadata = new JSONObject[pixelsFiles.size()];
-    fullResolutionCoreIndex = new int[pixelsFiles.size()];
-    tileSizeX = new int[pixelsFiles.size()];
-    tileSizeY = new int[pixelsFiles.size()];
-    overlapX = new int[pixelsFiles.size()];
-    overlapY = new int[pixelsFiles.size()];
-    scaleFactor = new int[pixelsFiles.size()];
-    tileRangeX = new int[2][pixelsFiles.size()];
-    tileRangeY = new int[2][pixelsFiles.size()];
-    zSteps = new Integer[pixelsFiles.size()][];
-
-    Arrays.fill(tileRangeX[0], Integer.MAX_VALUE);
-    Arrays.fill(tileRangeY[0], Integer.MAX_VALUE);
-
     for (int i=0; i<pixelsFiles.size(); i++) {
       String file = pixelsFiles.get(i);
       CoreMetadata m = new CoreMetadata();
       m.pixelType = FormatTools.UINT8;
 
+      int startRegionIndex = regions.size();
+
       Connection conn = openConnection(file);
       try {
         PreparedStatement regionQuery = conn.prepareStatement(
-          "SELECT id, data FROM region"
+          "SELECT id, data, is_timelapse FROM region ORDER BY id"
         );
         ResultSet regionData = regionQuery.executeQuery();
-        // expect a single row returned
-        if (regionData.next()) {
+
+        // expect one row per timepoint
+        while (regionData.next()) {
+          int regionID = regionData.getInt(1);
           String json = regionData.getString(2);
+          boolean isTimelapse = regionData.getBoolean(3);
+
           LOGGER.trace("{}", json);
+
+          ScanRegion region = new ScanRegion();
+          region.id = regionID;
+          region.file = file;
 
           try {
             // expect trailing whitespace and line breaks
@@ -316,45 +315,69 @@ public class TissuegnosticsReader extends FormatReader {
             // which will prevent parsing
             json = json.trim();
             json = json.replaceAll("\r\n", "_");
-            regionMetadata[i] = new JSONObject(json);
+            region.regionMetadata = new JSONObject(json);
           }
           catch (JSONException je) {
             throw new FormatException("Could not read metadata for region in " + file, je);
           }
 
-          // "Rows" and "Columns" in the JSON metadata here
-          // reflect the canvas size, not the area (FOVs) actually acquired
+          region.parseJSON();
+          region.timepoint = regions.size() - startRegionIndex;
 
-          tileSizeX[i] = regionMetadata[i].getInt("ImageWidth");
-          tileSizeY[i] = regionMetadata[i].getInt("ImageHeight");
-          overlapX[i] = regionMetadata[i].getInt("OverlapWidth");
-          overlapY[i] = regionMetadata[i].getInt("OverlapHeight");
-          scaleFactor[i] = regionMetadata[i].getInt("CacheStep");
+          // TODO: this means TMA regions are parsed, but not recorded separately
+          // that might be OK, but needs to be double-checked
+          if (isTimelapse || regions.size() == startRegionIndex) {
+            regions.add(region);
+          }
         }
+        int timepoints = regions.size() - startRegionIndex;
 
-        PreparedStatement fovQuery = conn.prepareStatement(
-          "SELECT row, column FROM fovs"
-        );
-        ResultSet fovs = fovQuery.executeQuery();
-        while (fovs.next()) {
-          int row = fovs.getInt(1);
-          int col = fovs.getInt(2);
-          tileRangeY[0][i] = (int) Math.min(tileRangeY[0][i], row);
-          tileRangeY[1][i] = (int) Math.max(tileRangeY[1][i], row);
-          tileRangeX[0][i] = (int) Math.min(tileRangeX[0][i], col);
-          tileRangeX[1][i] = (int) Math.max(tileRangeX[1][i], col);
-        }
-        // TODO: no overlap handling yet
-        m.sizeX = (tileRangeX[1][i] - tileRangeX[0][i] + 1) * tileSizeX[i];
-        m.sizeY = (tileRangeY[1][i] - tileRangeY[0][i] + 1) * tileSizeY[i];
+        for (int regionIndex=startRegionIndex; regionIndex<regions.size(); regionIndex++) {
+          ScanRegion currentRegion = regions.get(regionIndex);
 
-        PreparedStatement maxLevelQuery = conn.prepareStatement(
-          "SELECT level FROM images ORDER BY level DESC"
-        );
-        ResultSet maxLevel = maxLevelQuery.executeQuery();
-        if (maxLevel.next()) {
-          int resolutionCount = maxLevel.getInt(1);
-          m.resolutionCount = resolutionCount + 1;
+          PreparedStatement fovQuery = conn.prepareStatement(
+            "SELECT row, column FROM fovs WHERE region_id=?"
+          );
+          fovQuery.setInt(1, regions.get(regionIndex).id);
+
+          ResultSet fovs = fovQuery.executeQuery();
+          while (fovs.next()) {
+            int row = fovs.getInt(1);
+            int col = fovs.getInt(2);
+            currentRegion.tileRangeY[0] = (int) Math.min(currentRegion.tileRangeY[0], row);
+            currentRegion.tileRangeY[1] = (int) Math.max(currentRegion.tileRangeY[1], row);
+            currentRegion.tileRangeX[0] = (int) Math.min(currentRegion.tileRangeX[0], col);
+            currentRegion.tileRangeX[1] = (int) Math.max(currentRegion.tileRangeX[1], col);
+          }
+          // TODO: no overlap handling yet
+          m.sizeX = (currentRegion.tileRangeX[1] - currentRegion.tileRangeX[0] + 1) * currentRegion.tileSizeX;
+          m.sizeY = (currentRegion.tileRangeY[1] - currentRegion.tileRangeY[0] + 1) * currentRegion.tileSizeY;
+
+          PreparedStatement maxLevelQuery = conn.prepareStatement(
+            "SELECT level FROM images WHERE region=? ORDER BY level DESC"
+          );
+          maxLevelQuery.setInt(1, currentRegion.id);
+          ResultSet maxLevel = maxLevelQuery.executeQuery();
+          if (maxLevel.next()) {
+            int resolutionCount = maxLevel.getInt(1);
+            m.resolutionCount = resolutionCount + 1;
+          }
+
+          PreparedStatement zQuery = conn.prepareStatement(
+            "SELECT DISTINCT is_zstack,z_position FROM images WHERE region=? ORDER BY is_zstack,z_position"
+          );
+          zQuery.setInt(1, currentRegion.id);
+
+          ResultSet zs = zQuery.executeQuery();
+          ArrayList<Integer> tmpZ = new ArrayList<Integer>();
+          while (zs.next()) {
+            boolean isZ = zs.getBoolean(1);
+            int zPos = zs.getInt(2);
+
+            tmpZ.add(zPos);
+          }
+          currentRegion.zSteps = tmpZ.toArray(new Integer[tmpZ.size()]);
+          currentRegion.fullResolutionCoreIndex = core.size();
         }
 
         PreparedStatement channelQuery = conn.prepareStatement(
@@ -371,19 +394,6 @@ public class TissuegnosticsReader extends FormatReader {
             m.pixelType = FormatTools.UINT16;
           }
         }
-
-        PreparedStatement zQuery = conn.prepareStatement(
-          "SELECT DISTINCT is_zstack,z_position FROM images WHERE level=0 ORDER BY is_zstack,z_position"
-        );
-        ResultSet zs = zQuery.executeQuery();
-        ArrayList<Integer> tmpZ = new ArrayList<Integer>();
-        while (zs.next()) {
-          boolean isZ = zs.getBoolean(1);
-          int zPos = zs.getInt(2);
-
-          tmpZ.add(zPos);
-        }
-        zSteps[i] = tmpZ.toArray(new Integer[tmpZ.size()]);
       }
       catch (SQLException e) {
         LOGGER.warn("Failed to initialize", e);
@@ -397,8 +407,8 @@ public class TissuegnosticsReader extends FormatReader {
         }
       }
 
-      m.sizeZ = zSteps[i].length;
-      m.sizeT = 1;
+      m.sizeZ = regions.get(startRegionIndex).zSteps.length;
+      m.sizeT = regions.size() - startRegionIndex;
       m.imageCount = m.sizeZ * m.sizeC * m.sizeT;
 
       // TODO: bad assumption in general?
@@ -410,10 +420,9 @@ public class TissuegnosticsReader extends FormatReader {
       m.dimensionOrder = "XYCZT";
 
       core.add(m);
-      fullResolutionCoreIndex[i] = core.size() - 1;
       for (int r=1; r<m.resolutionCount; r++) {
         CoreMetadata res = new CoreMetadata(m);
-        int scale = (int) Math.pow(scaleFactor[i], r);
+        int scale = (int) Math.pow(regions.get(startRegionIndex).scaleFactor, r);
         res.sizeX /= scale;
         res.sizeY /= scale;
         res.resolutionCount = 1;
@@ -429,32 +438,35 @@ public class TissuegnosticsReader extends FormatReader {
     String instrument = MetadataTools.createLSID("Instrument", 0);
     store.setInstrumentID(instrument, 0);
 
-    for (int i=0; i<regionMetadata.length; i++) {
-      int imageIndex = hasFlattenedResolutions() ? fullResolutionCoreIndex[i] : i;
+    for (int i=0, index=0; i<regions.size(); index++) {
+      ScanRegion region = regions.get(i);
+      int imageIndex = hasFlattenedResolutions() ? region.fullResolutionCoreIndex : index;
 
-      String objectiveID = MetadataTools.createLSID("Objective", 0, i);
-      store.setObjectiveID(objectiveID, 0, i);
+      String objectiveID = MetadataTools.createLSID("Objective", 0, index);
+      store.setObjectiveID(objectiveID, 0, index);
 
-      Double lensNA = regionMetadata[i].getDouble("ObjectiveLensNA");
-      store.setObjectiveLensNA(lensNA, 0, i);
+      Double lensNA = region.regionMetadata.getDouble("ObjectiveLensNA");
+      store.setObjectiveLensNA(lensNA, 0, index);
 
-      String immersion = regionMetadata[i].getString("ObjectiveImmersion");
-      store.setObjectiveImmersion(getImmersion(immersion), 0, i);
+      String immersion = region.regionMetadata.getString("ObjectiveImmersion");
+      store.setObjectiveImmersion(getImmersion(immersion), 0, index);
 
-      Double magnification = regionMetadata[i].getDouble("ObjectiveNominalMagnification");
-      store.setObjectiveNominalMagnification(magnification, 0, i);
+      Double magnification = region.regionMetadata.getDouble("ObjectiveNominalMagnification");
+      store.setObjectiveNominalMagnification(magnification, 0, index);
 
-      String objectiveName = regionMetadata[i].getString("ObjectiveName");
-      store.setObjectiveModel(objectiveName, 0, i);
+      String objectiveName = region.regionMetadata.getString("ObjectiveName");
+      store.setObjectiveModel(objectiveName, 0, index);
 
-      store.setImageName(regionMetadata[i].getString("Name"), imageIndex);
+      store.setImageName(region.regionMetadata.getString("Name"), imageIndex);
       store.setObjectiveSettingsID(objectiveID, imageIndex);
 
-      Double physicalX = regionMetadata[i].getDouble("PhysicalSizeX");
-      Double physicalY = regionMetadata[i].getDouble("PhysicalSizeY");
+      Double physicalX = region.regionMetadata.getDouble("PhysicalSizeX");
+      Double physicalY = region.regionMetadata.getDouble("PhysicalSizeY");
 
       store.setPixelsPhysicalSizeX(FormatTools.getPhysicalSizeX(physicalX), imageIndex);
       store.setPixelsPhysicalSizeY(FormatTools.getPhysicalSizeY(physicalY), imageIndex);
+
+      i += core.get(imageIndex).sizeT;
     }
   }
 
@@ -478,28 +490,27 @@ public class TissuegnosticsReader extends FormatReader {
     }
   }
 
-  private int getLevel() {
-    if (hasFlattenedResolutions()) {
-      int fullResIndex = fullResolutionCoreIndex[getRegionIndex()];
-      return getCoreIndex() - fullResIndex;
-    }
-    return getResolution();
+  private ScanRegion getRegion() throws FormatException {
+    return getRegion(0);
   }
 
-  private int getRegionIndex() {
-    if (hasFlattenedResolutions()) {
-      int index = getCoreIndex();
-      for (int i=fullResolutionCoreIndex.length-1; i>=0; i--) {
-        if (fullResolutionCoreIndex[i] < index) {
-          return i;
-        }
+  private ScanRegion getRegion(int t) throws FormatException {
+    int index = getCoreIndex();
+    for (int i=regions.size()-1; i>=0; i--) {
+      ScanRegion r = regions.get(i);
+      if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
+        return r;
       }
     }
-    return getSeries();
+    throw new FormatException("Could not find ScanRegion (core index " + index + ", t=" + t + ")");
   }
 
-  private String getDBFile() {
-    return pixelsFiles.get(getRegionIndex());
+  private int getLevel() throws FormatException {
+    if (hasFlattenedResolutions()) {
+      ScanRegion region = getRegion();
+      return getCoreIndex() - region.fullResolutionCoreIndex;
+    }
+    return getResolution();
   }
 
   private Codec getCodec(int compression) throws UnsupportedCompressionException {
@@ -530,6 +541,33 @@ public class TissuegnosticsReader extends FormatReader {
       throw new IOException(e);
     }
     return conn;
+  }
+
+  class ScanRegion {
+    public String file;
+    public JSONObject regionMetadata;
+    public int id;
+    public int fullResolutionCoreIndex;
+    public int tileSizeX;
+    public int tileSizeY;
+    public int overlapX;
+    public int overlapY;
+    public int scaleFactor;
+    public int[] tileRangeX = new int[] {Integer.MAX_VALUE, 0};
+    public int[] tileRangeY = new int[] {Integer.MAX_VALUE, 0};
+    public Integer[] zSteps;
+    public int timepoint;
+
+    public void parseJSON() {
+      // "Rows" and "Columns" in the JSON metadata here
+      // reflect the canvas size, not the area (FOVs) actually acquired
+      tileSizeX = regionMetadata.getInt("ImageWidth");
+      tileSizeY = regionMetadata.getInt("ImageHeight");
+      overlapX = regionMetadata.getInt("OverlapWidth");
+      overlapY = regionMetadata.getInt("OverlapHeight");
+      scaleFactor = regionMetadata.getInt("CacheStep");
+    }
+
   }
 
 }
