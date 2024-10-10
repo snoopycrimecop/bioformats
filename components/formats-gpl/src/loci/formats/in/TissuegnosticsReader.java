@@ -171,14 +171,16 @@ public class TissuegnosticsReader extends FormatReader {
     int level = getLevel();
     int scale = (int) Math.pow(region.scaleFactor, level);
 
+    int scaledOverlapX = region.overlapX / scale;
+    int scaledOverlapY = region.overlapY / scale;
+
     Region dest = new Region(x, y, w, h);
     Connection conn = openConnection(region.file);
     try {
       PreparedStatement tiles = conn.prepareStatement(
         "SELECT data, compression, row, column FROM images WHERE region=? AND level=? AND " +
-        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column DESC"
+        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column"
       );
-      // TODO: account for possiblity of overlap
 
       int rowOffset = (int) Math.floor((double) region.tileRangeY[0] / scale);
       int colOffset = (int) Math.floor((double) region.tileRangeX[0] / scale);
@@ -232,32 +234,46 @@ public class TissuegnosticsReader extends FormatReader {
 
         int relativeColumn = column - (int) Math.floor((double) region.tileRangeX[0] / scale);
         int relativeRow = row - (int) Math.floor((double) region.tileRangeY[0] / scale);
-        relativeColumn *= options.width;
-        relativeRow *= options.height;
+
+        int pixelColumn = relativeColumn * options.width;
+        int pixelRow = relativeRow * options.height;
 
         if (level > 0) {
-          relativeRow -= relativeUpperLeftY;
-          relativeColumn -= relativeUpperLeftX;
+          pixelRow -= relativeUpperLeftY;
+          pixelColumn -= relativeUpperLeftX;
         }
 
-        Region src = new Region(relativeColumn, relativeRow, options.width, options.height);
+        // overlap handling
+        // TODO: make this work for subresolutions too
+        if (level == 0) {
+          Region fov = region.fovs.get(row + "-" + column);
+          pixelRow -= fov.y;
+          pixelColumn -= fov.x;
+
+          pixelRow -= (relativeRow * region.overlapY);
+          pixelColumn -= (relativeColumn * region.overlapX);
+        }
+
+        Region src = new Region(pixelColumn, pixelRow, options.width, options.height);
         Region intersection = src.intersection(dest);
 
-        int outputRowLen = w * bpp;
-        int intersectionX = (int) Math.max(0, dest.x - src.x);
-        int rowLen = bpp * (int) Math.min(intersection.width, region.tileSizeX);
+        if (intersection.width > 0 && intersection.height > 0) {
+          int outputRowLen = w * bpp;
+          int intersectionX = (int) Math.max(0, dest.x - src.x);
+          int rowLen = bpp * (int) Math.min(intersection.width, region.tileSizeX);
 
-        int outputRow = intersection.y - y;
-        int outputCol = intersection.x - x;
-        int outputOffset = outputRow * outputRowLen + outputCol * bpp;
-        for (int c=0; c<getRGBChannelCount(); c++) {
-          int srcChannelOffset = c * (tile.length / getRGBChannelCount());
-          int destChannelOffset = c * w * h * bpp;
-          for (int copyRow=0; copyRow<intersection.height; copyRow++) {
-            int realRow = copyRow + intersection.y - src.y;
-            int inputOffset = bpp * (realRow * region.tileSizeX + intersectionX);
-            System.arraycopy(tile, srcChannelOffset + inputOffset,
-              buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
+          int outputRow = intersection.y - y;
+          int outputCol = intersection.x - x;
+          int outputOffset = outputRow * outputRowLen + outputCol * bpp;
+          for (int c=0; c<getRGBChannelCount(); c++) {
+            int srcChannelOffset = c * (tile.length / getRGBChannelCount());
+            int destChannelOffset = c * w * h * bpp;
+            for (int copyRow=0; copyRow<intersection.height; copyRow++) {
+              int realRow = copyRow + intersection.y - src.y;
+              int inputOffset = bpp * (realRow * region.tileSizeX + intersectionX);
+              System.arraycopy(tile, srcChannelOffset + inputOffset,
+                buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
+            }
           }
         }
       }
@@ -341,7 +357,7 @@ public class TissuegnosticsReader extends FormatReader {
           ScanRegion currentRegion = regions.get(regionIndex);
 
           PreparedStatement fovQuery = conn.prepareStatement(
-            "SELECT row, column FROM fovs WHERE region_id=?"
+            "SELECT row, column, stitch_rectangle_x, stitch_rectangle_y, stitch_rectangle_w, stitch_rectangle_h FROM fovs WHERE region_id=?"
           );
           fovQuery.setInt(1, regions.get(regionIndex).id);
 
@@ -349,14 +365,22 @@ public class TissuegnosticsReader extends FormatReader {
           while (fovs.next()) {
             int row = fovs.getInt(1);
             int col = fovs.getInt(2);
+            double x = fovs.getDouble(3);
+            double y = fovs.getDouble(4);
+            double w = fovs.getDouble(5);
+            double h = fovs.getDouble(6);
             currentRegion.tileRangeY[0] = (int) Math.min(currentRegion.tileRangeY[0], row);
             currentRegion.tileRangeY[1] = (int) Math.max(currentRegion.tileRangeY[1], row);
             currentRegion.tileRangeX[0] = (int) Math.min(currentRegion.tileRangeX[0], col);
             currentRegion.tileRangeX[1] = (int) Math.max(currentRegion.tileRangeX[1], col);
+
+            Region fov = new Region((int) x, (int) y, (int) w, (int) h);
+            currentRegion.fovs.put(row + "-" + col, fov);
           }
-          // TODO: no overlap handling yet
-          m.sizeX = (currentRegion.tileRangeX[1] - currentRegion.tileRangeX[0] + 1) * currentRegion.tileSizeX;
-          m.sizeY = (currentRegion.tileRangeY[1] - currentRegion.tileRangeY[0] + 1) * currentRegion.tileSizeY;
+          int xTiles = currentRegion.tileRangeX[1] - currentRegion.tileRangeX[0] + 1;
+          int yTiles = currentRegion.tileRangeY[1] - currentRegion.tileRangeY[0] + 1;
+          m.sizeX = xTiles * (currentRegion.tileSizeX - currentRegion.overlapX);
+          m.sizeY = yTiles * (currentRegion.tileSizeY - currentRegion.overlapY);
 
           PreparedStatement maxLevelQuery = conn.prepareStatement(
             "SELECT level FROM images WHERE region=? ORDER BY level DESC"
@@ -585,6 +609,7 @@ public class TissuegnosticsReader extends FormatReader {
     public Integer[] zSteps;
     public int timepoint;
     public List<Channel> channels = new ArrayList<Channel>();
+    public HashMap<String, Region> fovs = new HashMap<String, Region>();
 
     public void parseJSON() {
       // "Rows" and "Columns" in the JSON metadata here
