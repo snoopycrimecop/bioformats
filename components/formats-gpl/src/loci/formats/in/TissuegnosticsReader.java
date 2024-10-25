@@ -201,19 +201,6 @@ public class TissuegnosticsReader extends FormatReader {
       tiles.setInt(8, zct[0] > 0 ? 1 : 0);
       tiles.setInt(9, region.zSteps[zct[0]]);
 
-      // upper left corner of full resolution,
-      // in pixels relative to full canvas
-      int fullResUpperLeftX = region.tileRangeX[0] * region.tileSizeX;
-      int fullResUpperLeftY = region.tileRangeY[0] * region.tileSizeY;
-
-      // upper left corner of current resolution,
-      // in pixels relative to current resolution canvas
-      int currentResUpperLeftX = fullResUpperLeftX / scale;
-      int currentResUpperLeftY = fullResUpperLeftY / scale;
-
-      int relativeUpperLeftX = currentResUpperLeftX % region.tileSizeX;
-      int relativeUpperLeftY = currentResUpperLeftY % region.tileSizeY;
-
       ResultSet subsetTiles = tiles.executeQuery();
       while (subsetTiles.next()) {
         byte[] data = subsetTiles.getBytes(1);
@@ -238,13 +225,9 @@ public class TissuegnosticsReader extends FormatReader {
         int pixelColumn = relativeColumn * options.width;
         int pixelRow = relativeRow * options.height;
 
-        if (level > 0) {
-          pixelRow -= relativeUpperLeftY;
-          pixelColumn -= relativeUpperLeftX;
-        }
-
         // overlap handling
-        // TODO: make this work for subresolutions too
+        byte[][] fovs = null;
+        Region[] fovPositions = new Region[scale * scale];
         if (level == 0) {
           Region fov = region.fovs.get(row + "-" + column);
           pixelRow -= fov.y;
@@ -252,27 +235,49 @@ public class TissuegnosticsReader extends FormatReader {
 
           pixelRow -= (relativeRow * region.overlapY);
           pixelColumn -= (relativeColumn * region.overlapX);
+
+          fovPositions[0] = new Region(pixelColumn, pixelRow, options.width, options.height);
+          fovs = new byte[1][];
+          fovs[0] = tile;
+        }
+        else {
+          fovs = splitFOVs(region, tile, scale);
+
+          for (int f=0; f<fovs.length; f++) {
+            int fovRow = row*scale + (f / scale);
+            int fovColumn = column*scale + (f % scale);
+            Region fov = region.fovs.get(fovRow + "-" + fovColumn);
+            if (fov != null) {
+              int xx = (fovColumn * options.width / scale) - (fov.x / scale) - (fovColumn * scaledOverlapX);
+              int yy = (fovRow * options.height / scale) - (fov.y / scale) - (fovRow * scaledOverlapY);
+              fovPositions[f] = new Region(xx, yy, options.width / scale, options.height / scale);
+            }
+          }
         }
 
-        Region src = new Region(pixelColumn, pixelRow, options.width, options.height);
-        Region intersection = src.intersection(dest);
+        for (int f=0; f<fovs.length; f++) {
+          if (fovPositions[f] == null) {
+            continue;
+          }
+          Region intersection = fovPositions[f].intersection(dest);
 
-        if (intersection.width > 0 && intersection.height > 0) {
-          int outputRowLen = w * bpp;
-          int intersectionX = (int) Math.max(0, dest.x - src.x);
-          int rowLen = bpp * (int) Math.min(intersection.width, region.tileSizeX);
+          if (intersection.width > 0 && intersection.height > 0) {
+            int outputRowLen = w * bpp;
+            int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
+            int rowLen = bpp * (int) Math.min(intersection.width, fovPositions[f].width);
 
-          int outputRow = intersection.y - y;
-          int outputCol = intersection.x - x;
-          int outputOffset = outputRow * outputRowLen + outputCol * bpp;
-          for (int c=0; c<getRGBChannelCount(); c++) {
-            int srcChannelOffset = c * (tile.length / getRGBChannelCount());
-            int destChannelOffset = c * w * h * bpp;
-            for (int copyRow=0; copyRow<intersection.height; copyRow++) {
-              int realRow = copyRow + intersection.y - src.y;
-              int inputOffset = bpp * (realRow * region.tileSizeX + intersectionX);
-              System.arraycopy(tile, srcChannelOffset + inputOffset,
-                buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
+            int outputRow = intersection.y - y;
+            int outputCol = intersection.x - x;
+            int outputOffset = outputRow * outputRowLen + outputCol * bpp;
+            for (int c=0; c<getRGBChannelCount(); c++) {
+              int srcChannelOffset = c * (fovs[f].length / getRGBChannelCount());
+              int destChannelOffset = c * w * h * bpp;
+              for (int copyRow=0; copyRow<intersection.height; copyRow++) {
+                int realRow = copyRow + intersection.y - fovPositions[f].y;
+                int inputOffset = bpp * (realRow * (region.tileSizeX / scale) + intersectionX);
+                System.arraycopy(fovs[f], srcChannelOffset + inputOffset,
+                  buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
+              }
             }
           }
         }
@@ -410,7 +415,7 @@ public class TissuegnosticsReader extends FormatReader {
         }
 
         PreparedStatement channelQuery = conn.prepareStatement(
-          "SELECT id, name, color, save_16bit, excitation_wavelength, emission_wavelength FROM channels ORDER BY id"
+          "SELECT DISTINCT id, name, color, save_16bit, excitation_wavelength, emission_wavelength FROM channels ORDER BY id"
         );
         ResultSet channels = channelQuery.executeQuery();
         while (channels.next()) {
@@ -576,6 +581,55 @@ public class TissuegnosticsReader extends FormatReader {
       default:
         throw new UnsupportedCompressionException("Unsupported compression: " + compression);
     }
+  }
+
+  /**
+   * The largest resolution stores one field of view (FOV) per tile.
+   * Each sub-resolution has the same tile size as the largest resolution,
+   * so the number of FOVs stored in one tile increases as the resolutions
+   * get smaller.
+   *
+   * For example, with a tile size of 2048x2048 and a downsample factor of 4,
+   * resolution 1 will have 16 (4x4) FOVs per tile, with each FOV being 512x512.
+   *
+   * However, none of the FOV positions or overlaps are taken into account.
+   * So the first step in assembling a sub-resolution is to split each tile
+   * into its component FOVs. Then each FOV can be repositioned according to
+   * its associated stitching rectangle and overlap.
+   *
+   * This method only splits the given tile into component FOVs.
+   * This is not necessary for the largest resolution, only sub-resolutions.
+   */
+  private byte[][] splitFOVs(ScanRegion region, byte[] tile, int scale) {
+    byte[][] fovs = new byte[scale * scale][];
+    int bpp = FormatTools.getBytesPerPixel(getPixelType());
+    int channels = getRGBChannelCount();
+
+    int srcWidth = region.tileSizeX * bpp;
+    int destWidth = (region.tileSizeX / scale) * bpp;
+    int srcHeight = region.tileSizeY;
+    int destHeight = region.tileSizeY / scale;
+
+    for (int fov=0; fov<fovs.length; fov++) {
+      int fovRow = fov / scale;
+      int fovCol = fov % scale;
+
+      fovs[fov] = new byte[destWidth * destHeight * bpp * channels];
+
+      for (int c=0; c<channels; c++) {
+        int srcChannelOffset = c * srcWidth * srcHeight;
+        int destChannelOffset = c * destWidth * destHeight;
+
+        for (int row=0; row<destHeight; row++) {
+          int srcOffset = srcChannelOffset + (((fovRow * destHeight) + row) * srcWidth) + (fovCol * destWidth);
+          int destOffset = destChannelOffset + (row * destWidth);
+
+          System.arraycopy(tile, srcOffset, fovs[fov], destOffset, destWidth);
+        }
+      }
+    }
+
+    return fovs;
   }
 
   private Connection openConnection(String file) throws IOException {
