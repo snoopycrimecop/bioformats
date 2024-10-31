@@ -91,7 +91,7 @@ public class TissuegnosticsReader extends FormatReader {
   public TissuegnosticsReader() {
     super("Tissuegnostics", new String[] {"aqproj"});
     hasCompanionFiles = false;
-    domains = new String[] {FormatTools.HCS_DOMAIN};
+    domains = new String[] {FormatTools.HISTOLOGY_DOMAIN};
     datasetDescription = "An .aqproj file with one or more .tfcyto database files";
     suffixSufficient = true;
   }
