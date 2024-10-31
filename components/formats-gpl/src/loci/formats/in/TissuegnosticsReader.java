@@ -519,7 +519,11 @@ public class TissuegnosticsReader extends FormatReader {
         if (ch.exWave >= WAVE_MIN && ch.exWave <= WAVE_MAX) {
           store.setChannelExcitationWavelength(FormatTools.getWavelength((double) ch.exWave), imageIndex, c);
         }
-        store.setChannelColor(ch.getColor(), imageIndex, c);
+        // don't set a channel color for brightfield data
+        // the channel color is expected to be white in that case
+        if (!core.get(imageIndex).rgb) {
+          store.setChannelColor(ch.getColor(), imageIndex, c);
+        }
       }
 
       i += core.get(imageIndex).sizeT;
