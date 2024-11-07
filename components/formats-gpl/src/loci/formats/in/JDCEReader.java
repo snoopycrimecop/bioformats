@@ -28,9 +28,11 @@ package loci.formats.in;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 import loci.common.DataTools;
+import loci.common.Location;
 import loci.formats.CoreMetadata;
 import loci.formats.FormatException;
 import loci.formats.FormatReader;
@@ -52,8 +54,9 @@ public class JDCEReader extends FormatReader {
 
   // -- Fields --
 
-  private List<WellContainer> wells = new ArrayList<WellContainer>();
+  private List<JDCEWell> wells = new ArrayList<JDCEWell>();
   private String imageFileCSV = null;
+  private transient MinimalTiffReader helper = new MinimalTiffReader();
 
   // -- Constructor --
 
@@ -90,7 +93,9 @@ public class JDCEReader extends FormatReader {
     FormatTools.checkPlaneParameters(this, no, buf.length, x, y, w, h);
     Arrays.fill(buf, getFillColor());
 
-    return buf;
+    String file = getFile(no);
+    helper.setId(file);
+    return helper.openBytes(0, buf, x, y, w, h);
   }
 
   /* @see loci.formats.IFormatReader#getSeriesUsedFiles(boolean) */
@@ -105,6 +110,9 @@ public class JDCEReader extends FormatReader {
   @Override
   public void close(boolean fileOnly) throws IOException {
     super.close(fileOnly);
+    if (helper != null) {
+      helper.close(fileOnly);
+    }
     if (!fileOnly) {
       imageFileCSV = null;
       if (wells != null) {
@@ -192,18 +200,134 @@ public class JDCEReader extends FormatReader {
     catch (JSONException e) {
       throw new FormatException("Could not parse .jdce file", e);
     }
+    ms0.imageCount = getSizeZ() * getSizeC() * getSizeT();
+    ms0.dimensionOrder = "XYCZT";
 
     if (imageFileCSV == null) {
       throw new FormatException("Image metadata CSV not found, cannot get list of TIFF files");
     }
 
     String[] csvLines = DataTools.readFile(imageFileCSV).split("\r\n");
-    String[] columns = csvLines[0].split(",");
+    List<String> columns = Arrays.asList(csvLines[0].split(","));
+    int wellRowIndex = columns.indexOf("Row");
+    int wellColIndex = columns.indexOf("Column");
+    int fieldIndex = columns.indexOf("Field");
+    int wavelengthIndex = columns.indexOf("Wavelength");
+    int timepointIndex = columns.indexOf("Timepoint");
+    int zIndex = columns.indexOf("ZIndex");
+    int subfolderIndex = columns.indexOf("ImageSubFolderPath");
+    int fileNameIndex = columns.indexOf("ImageFileName");
+
+    Location parentDir = new Location(getCurrentFile()).getAbsoluteFile().getParentFile();
+    JDCEWell currentWell = null;
+    boolean firstFile = true;
     for (int i=1; i<csvLines.length; i++) {
       String[] line = csvLines[i].split(",");
+
+      int[] position = new int[4];
+      position[0] = Integer.parseInt(line[fieldIndex]);
+      position[1] = Integer.parseInt(line[zIndex]);
+      position[2] = Integer.parseInt(line[wavelengthIndex]);
+      position[3] = Integer.parseInt(line[timepointIndex]);
+
+      String subfolder = line[subfolderIndex];
+      String filename = line[fileNameIndex];
+      Location subfolderFile = new Location(parentDir, subfolder);
+      String imagePath = new Location(subfolderFile, filename).getAbsolutePath();
+
+      int wellRow = Integer.parseInt(line[wellRowIndex]) - 1;
+      int wellCol = Integer.parseInt(line[wellColIndex]) - 1;
+      if (currentWell == null || currentWell.getRowIndex() != wellRow ||
+        currentWell.getColumnIndex() != wellCol)
+      {
+        currentWell = lookupWell(wellRow, wellCol);
+      }
+      currentWell.addFile(imagePath, position);
+      currentWell.setFieldCount((int) Math.max(currentWell.getFieldCount(), position[0] + 1));
+
+      if (firstFile) {
+        try {
+          helper.setId(imagePath);
+          CoreMetadata m = helper.getCoreMetadataList().get(0);
+          ms0.sizeX = m.sizeX;
+          ms0.sizeY = m.sizeY;
+          ms0.pixelType = m.pixelType;
+          ms0.littleEndian = m.littleEndian;
+          ms0.sizeC *= m.sizeC;
+          ms0.rgb = m.rgb;
+
+          firstFile = false;
+        }
+        catch (FormatException | IOException e) {
+          LOGGER.debug("Could not read " + imagePath, e);
+        }
+      }
     }
+    for (JDCEWell well : wells) {
+      for (int f=0; f<well.getFieldCount(); f++) {
+        core.add(new CoreMetadata(ms0));
+      }
+    }
+    core.remove(0);
 
     MetadataStore store = makeFilterMetadata();
     MetadataTools.populatePixels(store, this, true);
+
+    wells.sort(null);
+
+    int imageIndex = 0;
+    for (int w=0; w<wells.size(); w++) {
+      wells.get(w).fillMetadataStore(store, 0, 0, w, 0, imageIndex);
+      imageIndex += wells.get(w).getFieldCount();
+    }
+  }
+
+  private JDCEWell lookupWell(int row, int col) {
+    for (JDCEWell well : wells) {
+      if (well.getRowIndex() == row && well.getColumnIndex() == col) {
+        return well;
+      }
+    }
+    JDCEWell well = new JDCEWell(row, col);
+    wells.add(well);
+    return well;
+  }
+
+  private String getFile(int no) {
+    int index = 0;
+    for (JDCEWell well : wells) {
+      if (well.getFieldCount() + index > getSeries()) {
+        return well.getFile(getSeries() - index, no);
+      }
+      index += well.getFieldCount();
+    }
+    return null;
+  }
+
+  class JDCEWell extends WellContainer {
+    HashMap<int[], Integer> posMap = new HashMap<int[], Integer>();
+
+    public JDCEWell(int row, int col) {
+      super(0, row, col, 1);
+    }
+
+    /**
+     * Add file at position [field, z, c, t].
+     */
+    public void addFile(String file, int[] position) {
+      super.addFile(file);
+      posMap.put(position, getAllFiles().size() - 1);
+    }
+
+    public String[] getFiles(int fieldIndex) {
+      List<String> allFiles = getAllFiles();
+      String[] fieldFiles = new String[getImageCount()];
+      for (int[] key : posMap.keySet()) {
+        if (key[0] == fieldIndex) {
+          fieldFiles[getIndex(key[1], key[2], key[3])] = allFiles.get(posMap.get(key));
+        }
+      }
+      return fieldFiles;
+    }
   }
 }
