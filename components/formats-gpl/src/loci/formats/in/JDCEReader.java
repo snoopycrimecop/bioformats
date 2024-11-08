@@ -102,34 +102,42 @@ public class JDCEReader extends FormatReader {
     Arrays.fill(buf, getFillColor());
 
     String file = getFile(no);
-    helper.setId(file);
-    return helper.openBytes(0, buf, x, y, w, h);
+    if (file != null) {
+      try {
+        helper.setId(file);
+        return helper.openBytes(0, buf, x, y, w, h);
+      }
+      catch (FormatException | IOException e) {
+        LOGGER.error("Invalid file " + file, e);
+      }
+    }
+    return buf;
   }
 
   /* @see loci.formats.IFormatReader#getSeriesUsedFiles(boolean) */
   @Override
   public String[] getSeriesUsedFiles(boolean noPixels) {
     FormatTools.assertId(currentId, true, 1);
-    String[] imageFiles = null;
+    ArrayList<String> imageFiles = new ArrayList<String>();
+    imageFiles.add(currentId);
+    imageFiles.add(imageFileCSV);
     if (!noPixels) {
       int index = 0;
       for (JDCEWell well : wells) {
         if (well.getFieldCount() + index > getSeries()) {
-          imageFiles = well.getFiles(getSeries() - index);
+          String[] f = well.getFiles(getSeries() - index);
+          for (String file : f) {
+            if (file != null && !imageFiles.contains(file)) {
+              imageFiles.add(file);
+            }
+          }
           break;
         }
         index += well.getFieldCount();
       }
     }
-    int totalFileCount = imageFiles == null ? 2 : imageFiles.length + 2;
-    String[] rtn = new String[totalFileCount];
-    rtn[0] = currentId;
-    rtn[1] = imageFileCSV;
-    if (imageFiles != null) {
-      System.arraycopy(imageFiles, 0, rtn, 2, imageFiles.length);
-    }
 
-    return rtn;
+    return imageFiles.toArray(new String[imageFiles.size()]);
   }
 
   /* @see loci.formats.IFormatReader#close(boolean) */
@@ -199,7 +207,11 @@ public class JDCEReader extends FormatReader {
 
     CoreMetadata ms0 = core.get(0);
     try {
-      JSONObject root = new JSONObject(DataTools.readFile(id));
+      String jsonText = DataTools.readFile(id);
+      if (!jsonText.startsWith("{")) {
+        jsonText = jsonText.substring(jsonText.indexOf("{"));
+      }
+      JSONObject root = new JSONObject(jsonText);
 
       JSONObject imageStack = root.getJSONObject("ImageStack");
       if (imageStack == null) {
@@ -223,7 +235,7 @@ public class JDCEReader extends FormatReader {
         else {
           // store creation timestamp in seconds, as plane timestamps are in seconds
           // TODO: not sure if timezone is right here
-          creationTimestamp = DateTools.getTime(date + " " + time + " " + timezone, "yyy-MM-dd HH:mm:ss X") / 1000.0;
+          creationTimestamp = DateTools.getTime(date + " " + time + " " + timezone, "yyy-MM-dd HH:mm:ss Z") / 1000.0;
         }
       }
       else {
@@ -255,7 +267,13 @@ public class JDCEReader extends FormatReader {
       if (timeSchedule == null) {
         throw new FormatException("Could not find time schedule, cannot determine SizeT");
       }
-      ms0.sizeT = timeSchedule.getInt("NumberOfTimepoints");
+      JSONArray timepoints = timeSchedule.getJSONArray("Times");
+      int timepointCount = timeSchedule.getInt("NumberOfTimepoints");
+      if (timepoints.length() != timepointCount) {
+        LOGGER.warn("Mismatched timepoint count; using {}, also found {}",
+          timepoints.length(), timepointCount);
+      }
+      ms0.sizeT = timepoints.length();
 
       JSONObject zDimension = plateMap.getJSONObject("ZDimensionParameters");
       if (zDimension == null) {
