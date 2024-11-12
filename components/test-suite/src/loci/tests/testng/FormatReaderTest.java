@@ -1909,6 +1909,13 @@ public class FormatReaderTest {
             continue;
           }
 
+          // only .jdce file in MD JDCE data can be used
+          if (reader.getFormat().equals("Molecular Devices JDCE") &&
+            !base[i].toLowerCase().endsWith(".jdce"))
+          {
+            continue;
+          }
+
           // extra metadata files in Harmony/Operetta datasets
           // cannot be used for type detection
           if (reader.getFormat().equals("PerkinElmer Operetta")) {
@@ -2893,6 +2900,18 @@ public class FormatReaderTest {
             if (!result && r instanceof CellSensReader &&
               ((!used[i].endsWith(".vsi") && !used[i].endsWith(".ets")) ||
               (used[i].endsWith(".ets") && !used[i].startsWith("frame"))))
+            {
+              continue;
+            }
+
+            // .jdce data can only be detected from .jdce file
+            if (!result && r instanceof JDCEReader &&
+              !used[i].endsWith(".jdce"))
+            {
+              continue;
+            }
+            if (result && r instanceof JDCEReader &&
+              readers[j] instanceof MetamorphTiffReader)
             {
               continue;
             }
