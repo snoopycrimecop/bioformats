@@ -104,6 +104,9 @@ public class JDCEReader extends FormatReader {
     String file = getFile(no);
     if (file != null) {
       try {
+        if (helper == null) {
+          helper = new MinimalTiffReader();
+        }
         helper.setId(file);
         return helper.openBytes(0, buf, x, y, w, h);
       }
@@ -162,8 +165,13 @@ public class JDCEReader extends FormatReader {
 
     try {
       String file = getFile(0);
-      helper.setId(file);
-      return helper.getOptimalTileWidth();
+      if (file != null) {
+        if (helper == null) {
+          helper = new MinimalTiffReader();
+        }
+        helper.setId(file);
+        return helper.getOptimalTileWidth();
+      }
     }
     catch (FormatException | IOException e) {
       LOGGER.debug("Could not get optimal tile width", e);
@@ -178,8 +186,13 @@ public class JDCEReader extends FormatReader {
 
     try {
       String file = getFile(0);
-      helper.setId(file);
-      return helper.getOptimalTileHeight();
+      if (file != null) {
+        if (helper == null) {
+          helper = new MinimalTiffReader();
+        }
+        helper.setId(file);
+        return helper.getOptimalTileHeight();
+      }
     }
     catch (FormatException | IOException e) {
       LOGGER.debug("Could not get optimal tile height", e);
@@ -362,9 +375,9 @@ public class JDCEReader extends FormatReader {
       if (currentWell == null || currentWell.getRowIndex() != wellRow ||
         currentWell.getColumnIndex() != wellCol)
       {
-        currentWell = lookupWell(wellRow, wellCol);
+        currentWell = lookupWell(wellRow, wellCol, ms0.imageCount);
       }
-      currentWell.addFile(imagePath, position);
+      currentWell.addFile(imagePath, position[0], getIndex(position[1], position[2], position[3]));
       currentWell.setFieldCount((int) Math.max(currentWell.getFieldCount(), position[0] + 1));
 
       PlaneMetadata p = new PlaneMetadata();
@@ -383,6 +396,9 @@ public class JDCEReader extends FormatReader {
 
       if (firstFile) {
         try {
+          if (helper == null) {
+            helper = new MinimalTiffReader();
+          }
           helper.setId(imagePath);
           CoreMetadata m = helper.getCoreMetadataList().get(0);
           ms0.sizeX = m.sizeX;
@@ -452,13 +468,13 @@ public class JDCEReader extends FormatReader {
     }
   }
 
-  private JDCEWell lookupWell(int row, int col) {
+  private JDCEWell lookupWell(int row, int col, int planeCount) {
     for (JDCEWell well : wells) {
       if (well.getRowIndex() == row && well.getColumnIndex() == col) {
         return well;
       }
     }
-    JDCEWell well = new JDCEWell(row, col);
+    JDCEWell well = new JDCEWell(row, col, planeCount);
     wells.add(well);
     return well;
   }
@@ -475,27 +491,39 @@ public class JDCEReader extends FormatReader {
   }
 
   class JDCEWell extends WellContainer {
-    HashMap<int[], Integer> posMap = new HashMap<int[], Integer>();
+    HashMap<String, Integer> posMap = new HashMap<String, Integer>();
     HashMap<String, PlaneMetadata> metadataMap = new HashMap<String, PlaneMetadata>();
+    int planeCount = 0;
 
-    public JDCEWell(int row, int col) {
+    public JDCEWell(int row, int col, int planeCount) {
       super(0, row, col, 1);
+      this.planeCount = planeCount;
     }
 
     /**
-     * Add file at position [field, z, c, t].
+     * Add file for the given field and plane indexes.
      */
-    public void addFile(String file, int[] position) {
+    public void addFile(String file, int fieldIndex, int planeIndex) {
       super.addFile(file);
-      posMap.put(position, getAllFiles().size() - 1);
+      posMap.put(fieldIndex + "-" + planeIndex, getAllFiles().size() - 1);
+    }
+
+    private int[] getIndex(String key) {
+      String[] k = key.split("-");
+      int[] v = new int[k.length];
+      for (int i=0; i<v.length; i++) {
+        v[i] = Integer.parseInt(k[i]);
+      }
+      return v;
     }
 
     public String[] getFiles(int fieldIndex) {
       List<String> allFiles = getAllFiles();
-      String[] fieldFiles = new String[getImageCount()];
-      for (int[] key : posMap.keySet()) {
-        if (key[0] == fieldIndex) {
-          fieldFiles[getIndex(key[1], key[2], key[3])] = allFiles.get(posMap.get(key));
+      String[] fieldFiles = new String[planeCount];
+      for (String key : posMap.keySet()) {
+        int[] keyIndex = getIndex(key);
+        if (keyIndex[0] == fieldIndex) {
+          fieldFiles[keyIndex[1]] = allFiles.get(posMap.get(key));
         }
       }
       return fieldFiles;
