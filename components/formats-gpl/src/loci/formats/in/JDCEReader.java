@@ -194,6 +194,8 @@ public class JDCEReader extends FormatReader {
   protected void initFile(String id) throws FormatException, IOException {
     super.initFile(id);
 
+    Location parentDir = new Location(getCurrentFile()).getAbsoluteFile().getParentFile();
+
     String plateName = null;
     Length physicalSizeX = null;
     Length physicalSizeY = null;
@@ -310,7 +312,7 @@ public class JDCEReader extends FormatReader {
       if (metadataFiles == null || metadataFiles.length() == 0) {
         throw new FormatException("Could not find image metadata CSV, cannot get list of TIFF files");
       }
-      imageFileCSV = metadataFiles.getString(0);
+      imageFileCSV = new Location(parentDir, metadataFiles.getString(0)).getAbsolutePath();
     }
     catch (JSONException e) {
       throw new FormatException("Could not parse .jdce file", e);
@@ -339,7 +341,6 @@ public class JDCEReader extends FormatReader {
     int positionYIndex = columns.indexOf("PositionYUm");
     int positionZIndex = columns.indexOf("PositionZUm");
 
-    Location parentDir = new Location(getCurrentFile()).getAbsoluteFile().getParentFile();
     JDCEWell currentWell = null;
     boolean firstFile = true;
     for (int i=1; i<csvLines.length; i++) {
