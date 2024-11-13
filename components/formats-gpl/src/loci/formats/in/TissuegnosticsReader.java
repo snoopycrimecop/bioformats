@@ -521,12 +521,12 @@ public class TissuegnosticsReader extends FormatReader {
         }
         // don't set a channel color for brightfield data
         // the channel color is expected to be white in that case
-        if (!core.get(imageIndex).rgb) {
+        if (!core.get(region.fullResolutionCoreIndex).rgb) {
           store.setChannelColor(ch.getColor(), imageIndex, c);
         }
       }
 
-      i += core.get(imageIndex).sizeT;
+      i += core.get(region.fullResolutionCoreIndex).sizeT;
     }
   }
 
