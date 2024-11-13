@@ -304,6 +304,9 @@ public class JDCEReader extends FormatReader {
       channelNames = new String[ms0.sizeC];
       emissionWavelengths = new Length[ms0.sizeC];
       excitationWavelengths = new Length[ms0.sizeC];
+      String[] imagingMode = new String[ms0.sizeC];
+
+      boolean singleZ = true;
       for (int c=0; c<ms0.sizeC; c++) {
         JSONObject wavelength = wavelengths.getJSONObject(c);
         int channelIndex = wavelength.getInt("Index");
@@ -319,6 +322,17 @@ public class JDCEReader extends FormatReader {
         String exUnit = excitation.getString("Unit");
         double exWave = excitation.getDouble("Wavelength");
         excitationWavelengths[channelIndex] = FormatTools.getWavelength(exWave, exUnit);
+
+        // if all of the imaging modes are "Max Intensity Projection",
+        // the Z size will be reset to 1 since only one Z slice is present
+        imagingMode[c] = wavelength.getString("ImagingMode");
+        if (imagingMode[c] == null || (c >= 1 && (!imagingMode[c].equals("Max Intensity Projection") || !imagingMode[c].equals(imagingMode[0])))) {
+          singleZ = false;
+        }
+      }
+      if (singleZ) {
+        LOGGER.debug("Ignoring Z stack size {} based on wavelength definition", ms0.sizeZ);
+        ms0.sizeZ = 1;
       }
 
       JSONArray metadataFiles = imageStack.getJSONArray("ImageMetadataFiles");
