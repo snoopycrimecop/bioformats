@@ -48,6 +48,7 @@ import ome.units.quantity.Length;
 import ome.units.quantity.Time;
 import ome.xml.model.enums.NamingConvention;
 import ome.xml.model.primitives.PositiveInteger;
+import ome.xml.model.primitives.Timestamp;
 
 import org.json.JSONException;
 import org.json.JSONArray;
@@ -218,7 +219,7 @@ public class JDCEReader extends FormatReader {
 
     int plateRows = 0;
     int plateColumns = 0;
-    double creationTimestamp = 0;
+    String creationTimestamp = null;
 
     CoreMetadata ms0 = core.get(0);
     try {
@@ -245,16 +246,15 @@ public class JDCEReader extends FormatReader {
         String timezone = creation.getString("TimeZoneOffset");
 
         if (timezone == null || timezone.isEmpty()) {
-          LOGGER.warn("Timezone not defined; plane timestamps may be wrong");
+          LOGGER.warn("Timezone not defined; plate acquisition time may be wrong");
+          creationTimestamp = DateTools.formatDate(date + " " + time, "yyyy-MM-dd HH:mm:ss");
         }
         else {
-          // store creation timestamp in seconds, as plane timestamps are in seconds
-          // TODO: not sure if timezone is right here
-          creationTimestamp = DateTools.getTime(date + " " + time + " " + timezone, "yyy-MM-dd HH:mm:ss Z") / 1000.0;
+          creationTimestamp = DateTools.formatDate(date + " " + time + " " + timezone, "yyyy-MM-dd HH:mm:ss Z");
         }
       }
       else {
-        LOGGER.debug("Could not find plate creation time; plane timestamps may be wrong");
+        LOGGER.debug("Could not find plate creation time");
       }
 
       JSONObject acquisition = imageStack.getJSONObject("AutoLeadAcquisitionProtocol");
@@ -354,6 +354,8 @@ public class JDCEReader extends FormatReader {
     int positionYIndex = columns.indexOf("PositionYUm");
     int positionZIndex = columns.indexOf("PositionZUm");
 
+    Double smallestTimestamp = null;
+
     JDCEWell currentWell = null;
     boolean firstFile = true;
     for (int i=1; i<csvLines.length; i++) {
@@ -383,10 +385,12 @@ public class JDCEReader extends FormatReader {
       PlaneMetadata p = new PlaneMetadata();
 
       // plane times are stored in seconds since Jan. 1 1970
-      // subtracting the plate creation time gives relative timestamps
-      Double planeTime = DataTools.parseDouble(line[timestampIndex]);
-      planeTime -= creationTimestamp;
-      p.timestamp = FormatTools.createTime(planeTime, UNITS.SECOND);
+      // the smallest absolute timestamp will be subtracted later to get
+      // a readable relative timestamp
+      p.timestamp = DataTools.parseDouble(line[timestampIndex]);
+      if (p.timestamp != null && (smallestTimestamp == null || p.timestamp < smallestTimestamp)) {
+        smallestTimestamp = p.timestamp;
+      }
 
       p.exposureTime = FormatTools.createTime(DataTools.parseDouble(line[exposureTimeIndex]), UNITS.MILLISECOND);
       p.positionX = FormatTools.getStagePosition(DataTools.parseDouble(line[positionXIndex]), UNITS.MICROMETER);
@@ -433,6 +437,9 @@ public class JDCEReader extends FormatReader {
     store.setPlateColumnNamingConvention(NamingConvention.NUMBER, 0);
 
     store.setPlateAcquisitionID(MetadataTools.createLSID("PlateAcquisition", 0, 0), 0, 0);
+    if (creationTimestamp != null) {
+      store.setPlateAcquisitionStartTime(new Timestamp(creationTimestamp), 0, 0);
+    }
 
     wells.sort(null);
 
@@ -460,7 +467,12 @@ public class JDCEReader extends FormatReader {
             store.setPlanePositionX(p.positionX, imageIndex, plane);
             store.setPlanePositionY(p.positionY, imageIndex, plane);
             store.setPlanePositionZ(p.positionZ, imageIndex, plane);
-            store.setPlaneDeltaT(p.timestamp, imageIndex, plane);
+
+            if (p.timestamp != null && smallestTimestamp != null) {
+              Time stamp = FormatTools.createTime(p.timestamp - smallestTimestamp, UNITS.SECOND);
+              store.setPlaneDeltaT(stamp, imageIndex, plane);
+            }
+
             store.setPlaneExposureTime(p.exposureTime, imageIndex, plane);
           }
         }
@@ -548,7 +560,7 @@ public class JDCEReader extends FormatReader {
   }
 
   class PlaneMetadata {
-    public Time timestamp;
+    public Double timestamp;
     public Time exposureTime;
     public Length positionX;
     public Length positionY;
