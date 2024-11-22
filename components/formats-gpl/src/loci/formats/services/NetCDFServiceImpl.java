@@ -53,8 +53,6 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.google.common.collect.ImmutableList;
-
 /**
  * Utility class for working with NetCDF/HDF files.  Uses reflection to
  * call the NetCDF Java library.
