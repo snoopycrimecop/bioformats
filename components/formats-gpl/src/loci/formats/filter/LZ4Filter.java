@@ -56,9 +56,7 @@ public class LZ4Filter extends Filter {
 
   @Override
   public byte[] encode(byte[] dataIn) throws IOException {
-    // only decoding implementation needed for reading
-    byte[] dataOut = dataIn;
-    return dataOut;
+    throw new UnsupportedOperationException("LZ4Filter does not support data compression");
   }
 
   @Override
