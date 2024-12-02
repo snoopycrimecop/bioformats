@@ -71,12 +71,12 @@ import org.slf4j.LoggerFactory;
 import org.sqlite.SQLiteConfig;
 
 /**
- *
+ * Reader for TissueFAXS format from TissueGnostics.
  */
-public class TissuegnosticsReader extends FormatReader {
+public class TissueFAXSReader extends FormatReader {
 
   private static final Logger LOGGER =
-    LoggerFactory.getLogger(TissuegnosticsReader.class);
+    LoggerFactory.getLogger(TissueFAXSReader.class);
 
   // per specification, wavelengths outside this range should be ignored
   private static final int WAVE_MIN = 300;
@@ -87,9 +87,9 @@ public class TissuegnosticsReader extends FormatReader {
 
   // -- Constructor --
 
-  /** Constructs a new Tissuegnostics reader.*/
-  public TissuegnosticsReader() {
-    super("Tissuegnostics", new String[] {"aqproj"});
+  /** Constructs a new TissueGnostics TissueFAXS reader.*/
+  public TissueFAXSReader() {
+    super("TissueFAXS", new String[] {"aqproj"});
     hasCompanionFiles = false;
     domains = new String[] {FormatTools.HISTOLOGY_DOMAIN};
     datasetDescription = "An .aqproj file with one or more .tfcyto database files";
