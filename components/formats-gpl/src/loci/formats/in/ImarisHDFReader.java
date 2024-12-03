@@ -329,7 +329,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
 
     int type = -1;
 
-    Object pix = getImageData(0, 0, 0, 1, 1);
+    Object pix = getSampleData();
     if (pix instanceof byte[][]) type = FormatTools.UINT8;
     else if (pix instanceof short[][]) type = FormatTools.UINT16;
     else if (pix instanceof int[][]) type = FormatTools.UINT32;
@@ -574,6 +574,24 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       catch (ServiceException e) {
         throw new FormatException(e);
       }
+    }
+    
+    return image;
+  }
+
+  private Object getSampleData()
+    throws FormatException
+  {
+    int resolutionIndex = getCoreIndex();
+    Object image = null;
+    int[] dimensions = new int[] {1, 2, 2};
+    int[] indices = new int[] {0, 0, 0};
+    try {
+      String path = "/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_0/Channel_0/Data";
+      image = netcdf.getArray(path, indices, dimensions);
+    }
+    catch (ServiceException e) {
+      throw new FormatException(e);
     }
     
     return image;
