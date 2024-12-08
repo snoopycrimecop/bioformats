@@ -594,11 +594,13 @@ public class TissueFAXSReader extends FormatReader {
       // if the region has TMA XY coordinates,
       // then the row/column values in the images table for this region ID
       // will be relative to this specific TMA block, not the overall image
+      // if we're somewhere within this TMA block, consider all FOVs for
+      // this TMA block
       if (region.tmaX != null) {
         int regionCol = region.tmaX * region.scaleFactor;
         startCol -= regionCol;
         endCol -= regionCol;
-        if (endCol >= 0) {
+        if (endCol >= 0 && startCol <= region.scaleFactor - 1) {
           startCol = 0;
           endCol = region.scaleFactor - 1;
         }
@@ -607,7 +609,7 @@ public class TissueFAXSReader extends FormatReader {
         int regionRow = region.tmaY * region.scaleFactor;
         startRow -= regionRow;
         endRow -= regionRow;
-        if (endRow >= 0) {
+        if (endRow >= 0 && startRow <= region.scaleFactor - 1) {
           startRow = 0;
           endRow = region.scaleFactor - 1;
         }
