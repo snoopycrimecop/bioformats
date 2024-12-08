@@ -166,133 +166,15 @@ public class TissueFAXSReader extends FormatReader {
     Arrays.fill(buf, getFillColor());
 
     int[] zct = getZCTCoords(no);
-    ScanRegion region = getRegion(zct[2]);
-    int bpp = FormatTools.getBytesPerPixel(getPixelType());
+    List<ScanRegion> planeRegions = getAllRegions(zct[2]);
     int level = getLevel();
-    int scale = (int) Math.pow(region.scaleFactor, level);
-
-    int scaledOverlapX = region.overlapX / scale;
-    int scaledOverlapY = region.overlapY / scale;
 
     Region dest = new Region(x, y, w, h);
-    Connection conn = openConnection(region.file);
-    try {
-      PreparedStatement tiles = conn.prepareStatement(
-        "SELECT data, compression, row, column FROM images WHERE region=? AND level=? AND " +
-        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column"
-      );
 
-      int rowOffset = (int) Math.floor((double) region.tileRangeY[0] / scale);
-      int colOffset = (int) Math.floor((double) region.tileRangeX[0] / scale);
-
-      int startRow = (int) Math.floor((double) y / region.tileSizeY) + rowOffset;
-      int startCol = (int) Math.floor((double) x / region.tileSizeX) + colOffset;
-      int endRow = (int) Math.ceil((double) (y + h) / region.tileSizeY) + rowOffset;
-      int endCol = (int) Math.ceil((double) (x + w) / region.tileSizeX) + colOffset;
-
-      tiles.setInt(1, region.id);
-      tiles.setInt(2, level);
-      tiles.setInt(3, startRow);
-      tiles.setInt(4, endRow);
-      tiles.setInt(5, startCol);
-      tiles.setInt(6, endCol);
-
-      tiles.setInt(7, zct[1] + 1);
-      tiles.setInt(8, zct[0] > 0 ? 1 : 0);
-      tiles.setInt(9, region.zSteps[zct[0]]);
-
-      ResultSet subsetTiles = tiles.executeQuery();
-      while (subsetTiles.next()) {
-        byte[] data = subsetTiles.getBytes(1);
-        int compression = subsetTiles.getInt(2);
-        int row = subsetTiles.getInt(3);
-        int column = subsetTiles.getInt(4);
-
-        LOGGER.debug("found {} bytes for row={}, column={}",
-          data.length, row, column);
-
-        CodecOptions options = new CodecOptions();
-        options.bitsPerSample = bpp * 8;
-        options.width = region.tileSizeX;
-        options.height = region.tileSizeY;
-
-        Codec codec = getCodec(compression);
-        byte[] tile = codec.decompress(data, options);
-
-        int relativeColumn = column - (int) Math.floor((double) region.tileRangeX[0] / scale);
-        int relativeRow = row - (int) Math.floor((double) region.tileRangeY[0] / scale);
-
-        int pixelColumn = relativeColumn * options.width;
-        int pixelRow = relativeRow * options.height;
-
-        // overlap handling
-        byte[][] fovs = null;
-        Region[] fovPositions = new Region[scale * scale];
-        if (level == 0) {
-          Region fov = region.fovs.get(row + "-" + column);
-          pixelRow -= fov.y;
-          pixelColumn -= fov.x;
-
-          pixelRow -= (relativeRow * region.overlapY);
-          pixelColumn -= (relativeColumn * region.overlapX);
-
-          fovPositions[0] = new Region(pixelColumn, pixelRow, options.width, options.height);
-          fovs = new byte[1][];
-          fovs[0] = tile;
-        }
-        else {
-          fovs = splitFOVs(region, tile, scale);
-
-          for (int f=0; f<fovs.length; f++) {
-            int fovRow = row*scale + (f / scale);
-            int fovColumn = column*scale + (f % scale);
-            Region fov = region.fovs.get(fovRow + "-" + fovColumn);
-            if (fov != null) {
-              int xx = (fovColumn * options.width / scale) - (fov.x / scale) - (fovColumn * scaledOverlapX);
-              int yy = (fovRow * options.height / scale) - (fov.y / scale) - (fovRow * scaledOverlapY);
-              fovPositions[f] = new Region(xx, yy, options.width / scale, options.height / scale);
-            }
-          }
-        }
-
-        for (int f=0; f<fovs.length; f++) {
-          if (fovPositions[f] == null) {
-            continue;
-          }
-          Region intersection = fovPositions[f].intersection(dest);
-
-          if (intersection.width > 0 && intersection.height > 0) {
-            int outputRowLen = w * bpp;
-            int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
-            int rowLen = bpp * (int) Math.min(intersection.width, fovPositions[f].width);
-
-            int outputRow = intersection.y - y;
-            int outputCol = intersection.x - x;
-            int outputOffset = outputRow * outputRowLen + outputCol * bpp;
-            for (int c=0; c<getRGBChannelCount(); c++) {
-              int srcChannelOffset = c * (fovs[f].length / getRGBChannelCount());
-              int destChannelOffset = c * w * h * bpp;
-              for (int copyRow=0; copyRow<intersection.height; copyRow++) {
-                int realRow = copyRow + intersection.y - fovPositions[f].y;
-                int inputOffset = bpp * (realRow * (region.tileSizeX / scale) + intersectionX);
-                System.arraycopy(fovs[f], srcChannelOffset + inputOffset,
-                  buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
-              }
-            }
-          }
-        }
-      }
-    }
-    catch (SQLException e) {
-      LOGGER.warn("Failed to query tiles", e);
-    }
-    finally {
-      try {
-        conn.close();
-      }
-      catch (SQLException e) {
-        LOGGER.warn("Failed to close connection", e);
-      }
+    // most datasets will have a single region per plane/resolution
+    // TMA data will have multiple regions for each full resolution plane
+    for (ScanRegion region : planeRegions) {
+      copyRegionToBuffer(region, level, dest, zct, buf);
     }
 
     return buf;
@@ -348,13 +230,15 @@ public class TissueFAXSReader extends FormatReader {
           }
 
           region.parseJSON();
-          region.timepoint = regions.size() - startRegionIndex;
-
-          // TODO: this means TMA regions are parsed, but not recorded separately
-          // that might be OK, but needs to be double-checked
-          if (isTimelapse || regions.size() == startRegionIndex) {
-            regions.add(region);
+          if (isTimelapse) {
+            region.timepoint = regions.size() - startRegionIndex;
           }
+          else if (regions.size() != startRegionIndex) {
+            // found region that represents part of the full resolution in a TMA
+            region.resolutions.add(0);
+          }
+
+          regions.add(region);
         }
         int timepoints = regions.size() - startRegionIndex;
 
@@ -382,20 +266,6 @@ public class TissueFAXSReader extends FormatReader {
             Region fov = new Region((int) x, (int) y, (int) w, (int) h);
             currentRegion.fovs.put(row + "-" + col, fov);
           }
-          int xTiles = currentRegion.tileRangeX[1] - currentRegion.tileRangeX[0] + 1;
-          int yTiles = currentRegion.tileRangeY[1] - currentRegion.tileRangeY[0] + 1;
-          m.sizeX = xTiles * (currentRegion.tileSizeX - currentRegion.overlapX);
-          m.sizeY = yTiles * (currentRegion.tileSizeY - currentRegion.overlapY);
-
-          PreparedStatement maxLevelQuery = conn.prepareStatement(
-            "SELECT level FROM images WHERE region=? ORDER BY level DESC"
-          );
-          maxLevelQuery.setInt(1, currentRegion.id);
-          ResultSet maxLevel = maxLevelQuery.executeQuery();
-          if (maxLevel.next()) {
-            int resolutionCount = maxLevel.getInt(1);
-            m.resolutionCount = resolutionCount + 1;
-          }
 
           PreparedStatement zQuery = conn.prepareStatement(
             "SELECT DISTINCT is_zstack,z_position FROM images WHERE region=? ORDER BY is_zstack,z_position"
@@ -412,6 +282,36 @@ public class TissueFAXSReader extends FormatReader {
           }
           currentRegion.zSteps = tmpZ.toArray(new Integer[tmpZ.size()]);
           currentRegion.fullResolutionCoreIndex = core.size();
+
+          if (currentRegion.resolutions.size() > 0) {
+            continue;
+          }
+
+          int xTiles = currentRegion.tileRangeX[1] - currentRegion.tileRangeX[0] + 1;
+          int yTiles = currentRegion.tileRangeY[1] - currentRegion.tileRangeY[0] + 1;
+          m.sizeX = xTiles * (currentRegion.tileSizeX - currentRegion.overlapX);
+          m.sizeY = yTiles * (currentRegion.tileSizeY - currentRegion.overlapY);
+
+          PreparedStatement maxLevelQuery = conn.prepareStatement(
+            "SELECT level FROM images WHERE region=? ORDER BY level DESC"
+          );
+          maxLevelQuery.setInt(1, currentRegion.id);
+          ResultSet maxLevel = maxLevelQuery.executeQuery();
+          int max = 0;
+          int min = Integer.MAX_VALUE;
+          while (maxLevel.next()) {
+            int level = maxLevel.getInt(1);
+            if (max == 0) {
+              max = level;
+            }
+            if (level >= m.resolutionCount) {
+              m.resolutionCount = level + 1;
+            }
+            min = level;
+          }
+          for (int r=min; r<=max; r++) {
+            currentRegion.resolutions.add(r);
+          }
         }
 
         PreparedStatement channelQuery = conn.prepareStatement(
@@ -450,7 +350,11 @@ public class TissueFAXSReader extends FormatReader {
       }
 
       m.sizeZ = regions.get(startRegionIndex).zSteps.length;
-      m.sizeT = regions.size() - startRegionIndex;
+
+      for (int r=startRegionIndex; r<regions.size(); r++) {
+        m.sizeT = (int) Math.max(m.sizeT, regions.get(r).timepoint + 1);
+      }
+
       m.imageCount = m.sizeZ * m.sizeC * m.sizeT;
 
       // TODO: bad assumption in general?
@@ -481,8 +385,17 @@ public class TissueFAXSReader extends FormatReader {
     String instrument = MetadataTools.createLSID("Instrument", 0);
     store.setInstrumentID(instrument, 0);
 
+    ArrayList<Integer> populatedCoreIndexes = new ArrayList<Integer>();
     for (int i=0, index=0; i<regions.size(); index++) {
       ScanRegion region = regions.get(i);
+
+      // skip over remaining TMA regions
+      if (populatedCoreIndexes.contains(region.fullResolutionCoreIndex)) {
+        i++;
+        index--;
+        continue;
+      }
+      populatedCoreIndexes.add(region.fullResolutionCoreIndex);
       int imageIndex = hasFlattenedResolutions() ? region.fullResolutionCoreIndex : index;
 
       String objectiveID = MetadataTools.createLSID("Objective", 0, index);
@@ -550,6 +463,21 @@ public class TissueFAXSReader extends FormatReader {
     }
   }
 
+  private List<ScanRegion> getAllRegions(int t) throws FormatException {
+    ArrayList<ScanRegion> planeRegions = new ArrayList<ScanRegion>();
+    int index = getCoreIndex();
+    for (int i=regions.size()-1; i>=0; i--) {
+      ScanRegion r = regions.get(i);
+      if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
+        int res = index - r.fullResolutionCoreIndex;
+        if (r.resolutions.contains(res)) {
+          planeRegions.add(r);
+        }
+      }
+    }
+    return planeRegions;
+  }
+
   private ScanRegion getRegion() throws FormatException {
     return getRegion(0);
   }
@@ -559,7 +487,10 @@ public class TissueFAXSReader extends FormatReader {
     for (int i=regions.size()-1; i>=0; i--) {
       ScanRegion r = regions.get(i);
       if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
-        return r;
+        int res = index - r.fullResolutionCoreIndex;
+        if (r.resolutions.contains(res)) {
+          return r;
+        }
       }
     }
     throw new FormatException("Could not find ScanRegion (core index " + index + ", t=" + t + ")");
@@ -636,6 +567,173 @@ public class TissueFAXSReader extends FormatReader {
     return fovs;
   }
 
+  private void copyRegionToBuffer(ScanRegion region, int level, Region dest, int[] zct, byte[] buf)
+    throws FormatException, IOException
+  {
+    int bpp = FormatTools.getBytesPerPixel(getPixelType());
+    int scale = (int) Math.pow(region.scaleFactor, level);
+
+    int scaledOverlapX = region.overlapX / scale;
+    int scaledOverlapY = region.overlapY / scale;
+
+    Connection conn = openConnection(region.file);
+    try {
+      PreparedStatement tiles = conn.prepareStatement(
+        "SELECT data, compression, row, column FROM images WHERE region=? AND level=? AND " +
+        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column"
+      );
+
+      int rowOffset = (int) Math.floor((double) region.tileRangeY[0] / scale);
+      int colOffset = (int) Math.floor((double) region.tileRangeX[0] / scale);
+
+      int startRow = (int) Math.floor((double) dest.y / region.tileSizeY) + rowOffset;
+      int startCol = (int) Math.floor((double) dest.x / region.tileSizeX) + colOffset;
+      int endRow = (int) Math.ceil((double) (dest.y + dest.height) / region.tileSizeY) + rowOffset;
+      int endCol = (int) Math.ceil((double) (dest.x + dest.width) / region.tileSizeX) + colOffset;
+
+      // if the region has TMA XY coordinates,
+      // then the row/column values in the images table for this region ID
+      // will be relative to this specific TMA block, not the overall image
+      if (region.tmaX != null) {
+        int regionCol = region.tmaX * region.scaleFactor;
+        startCol -= regionCol;
+        endCol -= regionCol;
+        if (endCol >= 0) {
+          startCol = 0;
+          endCol = region.scaleFactor - 1;
+        }
+      }
+      if (region.tmaY != null) {
+        int regionRow = region.tmaY * region.scaleFactor;
+        startRow -= regionRow;
+        endRow -= regionRow;
+        if (endRow >= 0) {
+          startRow = 0;
+          endRow = region.scaleFactor - 1;
+        }
+      }
+
+      tiles.setInt(1, region.id);
+      tiles.setInt(2, level);
+      tiles.setInt(3, startRow);
+      tiles.setInt(4, endRow);
+      tiles.setInt(5, startCol);
+      tiles.setInt(6, endCol);
+
+      tiles.setInt(7, zct[1] + 1);
+      tiles.setInt(8, zct[0] > 0 ? 1 : 0);
+      tiles.setInt(9, region.zSteps[zct[0]]);
+
+      ResultSet subsetTiles = tiles.executeQuery();
+      while (subsetTiles.next()) {
+        byte[] data = subsetTiles.getBytes(1);
+        int compression = subsetTiles.getInt(2);
+        int row = subsetTiles.getInt(3);
+        int column = subsetTiles.getInt(4);
+
+        LOGGER.debug("found {} bytes for row={}, column={}",
+          data.length, row, column);
+
+        CodecOptions options = new CodecOptions();
+        options.bitsPerSample = bpp * 8;
+        options.width = region.tileSizeX;
+        options.height = region.tileSizeY;
+
+        Codec codec = getCodec(compression);
+        byte[] tile = codec.decompress(data, options);
+
+        int regionRow = row;
+        int regionColumn = column;
+        if (region.tmaX != null) {
+          regionColumn += (region.tmaX * region.scaleFactor);
+        }
+        if (region.tmaY != null) {
+          regionRow += (region.tmaY * region.scaleFactor);
+        }
+
+        int relativeColumn = regionColumn - (int) Math.floor((double) region.tileRangeX[0] / scale);
+        int relativeRow = regionRow - (int) Math.floor((double) region.tileRangeY[0] / scale);
+
+        int pixelColumn = relativeColumn * options.width;
+        int pixelRow = relativeRow * options.height;
+
+        // overlap handling
+        byte[][] fovs = null;
+        Region[] fovPositions = new Region[scale * scale];
+        if (level == 0) {
+          Region fov = region.fovs.get(row + "-" + column);
+          pixelRow -= fov.y;
+          pixelColumn -= fov.x;
+
+          if (region.tmaX == null || region.tmaY == null) {
+            pixelRow -= (relativeRow * region.overlapY);
+            pixelColumn -= (relativeColumn * region.overlapX);
+          }
+          else {
+            pixelRow -= (regionRow * region.overlapY);
+            pixelColumn -= (regionColumn * region.overlapX);
+          }
+
+          fovPositions[0] = new Region(pixelColumn, pixelRow, options.width, options.height);
+          fovs = new byte[1][];
+          fovs[0] = tile;
+        }
+        else {
+          fovs = splitFOVs(region, tile, scale);
+
+          for (int f=0; f<fovs.length; f++) {
+            int fovRow = row*scale + (f / scale);
+            int fovColumn = column*scale + (f % scale);
+            Region fov = region.fovs.get(fovRow + "-" + fovColumn);
+            if (fov != null) {
+              int xx = (fovColumn * options.width / scale) - (fov.x / scale) - (fovColumn * scaledOverlapX);
+              int yy = (fovRow * options.height / scale) - (fov.y / scale) - (fovRow * scaledOverlapY);
+              fovPositions[f] = new Region(xx, yy, options.width / scale, options.height / scale);
+            }
+          }
+        }
+
+        for (int f=0; f<fovs.length; f++) {
+          if (fovPositions[f] == null) {
+            continue;
+          }
+          Region intersection = fovPositions[f].intersection(dest);
+
+          if (intersection.width > 0 && intersection.height > 0) {
+            int outputRowLen = dest.width * bpp;
+            int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
+            int rowLen = bpp * (int) Math.min(intersection.width, fovPositions[f].width);
+
+            int outputRow = intersection.y - dest.y;
+            int outputCol = intersection.x - dest.x;
+            int outputOffset = outputRow * outputRowLen + outputCol * bpp;
+            for (int c=0; c<getRGBChannelCount(); c++) {
+              int srcChannelOffset = c * (fovs[f].length / getRGBChannelCount());
+              int destChannelOffset = c * dest.width * dest.height * bpp;
+              for (int copyRow=0; copyRow<intersection.height; copyRow++) {
+                int realRow = copyRow + intersection.y - fovPositions[f].y;
+                int inputOffset = bpp * (realRow * (region.tileSizeX / scale) + intersectionX);
+                System.arraycopy(fovs[f], srcChannelOffset + inputOffset,
+                  buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
+              }
+            }
+          }
+        }
+      }
+    }
+    catch (SQLException e) {
+      LOGGER.warn("Failed to query tiles", e);
+    }
+    finally {
+      try {
+        conn.close();
+      }
+      catch (SQLException e) {
+        LOGGER.warn("Failed to close connection", e);
+      }
+    }
+  }
+
   private Connection openConnection(String file) throws IOException {
     Connection conn = null;
     try {
@@ -656,7 +754,22 @@ public class TissueFAXSReader extends FormatReader {
     public String file;
     public JSONObject regionMetadata;
     public int id;
+
+    // record the core index of the full resolution for the pyramid
+    // to which this region belongs
+    // separately, record the indexes of the resolutions in the pyramid
+    // for which this region applies
+    //
+    // for most data types, the resolutions list will include every resolution
+    // in the pyramid; there will be one region per timepoint
+    //
+    // for each TMA pyramid, though, expect one region whose resolutions list
+    // includes everything except resolution 0 (full resolution),
+    // and one or more regions with the same fullResolutionCoreIndex
+    // whose resolutions list contains only 0
     public int fullResolutionCoreIndex;
+    public List<Integer> resolutions = new ArrayList<Integer>();
+
     public int tileSizeX;
     public int tileSizeY;
     public int overlapX;
@@ -669,6 +782,9 @@ public class TissueFAXSReader extends FormatReader {
     public List<Channel> channels = new ArrayList<Channel>();
     public HashMap<String, Region> fovs = new HashMap<String, Region>();
 
+    public Integer tmaX;
+    public Integer tmaY;
+
     public void parseJSON() {
       // "Rows" and "Columns" in the JSON metadata here
       // reflect the canvas size, not the area (FOVs) actually acquired
@@ -677,6 +793,13 @@ public class TissueFAXSReader extends FormatReader {
       overlapX = regionMetadata.getInt("OverlapWidth");
       overlapY = regionMetadata.getInt("OverlapHeight");
       scaleFactor = regionMetadata.getInt("CacheStep");
+
+      if (regionMetadata.has("LocationOnTMABlockX")) {
+        tmaX = regionMetadata.getInt("LocationOnTMABlockX");
+      }
+      if (regionMetadata.has("LocationOnTMABlockY")) {
+        tmaY = regionMetadata.getInt("LocationOnTMABlockY");
+      }
     }
 
   }
