@@ -92,6 +92,7 @@ public class OIRReader extends FormatReader {
 
   private transient Double zStart;
   private transient Double zStep;
+  private transient Double tStart;
   private transient Double tStep;
   private transient HashMap<Integer, Double> timestampAdjustments = new HashMap<Integer, Double>();
 
@@ -277,6 +278,7 @@ public class OIRReader extends FormatReader {
       minT = Integer.MAX_VALUE;
       zStart = null;
       zStep = null;
+      tStart = null;
       tStep = null;
     }
   }
@@ -603,6 +605,9 @@ public class OIRReader extends FormatReader {
       for (int i=0; i<getImageCount(); i++) {
         int t = getZCTCoords(i)[2];
         double deltaT = t * tStep;
+        if (tStart != null) {
+          deltaT += tStart;
+        }
         for (Integer frame : timestampAdjustments.keySet()) {
           if (t >= frame) {
             deltaT += (timestampAdjustments.get(frame) - tStep);
@@ -1189,8 +1194,12 @@ public class OIRReader extends FormatReader {
               Element speed = getFirstChild(getFirstChild(scanner, "lsmimage:param"), "lsmparam:speed");
               speed = getFirstChild(speed, "commonparam:speedInformation");
               Element seriesInterval = getFirstChild(speed, "commonparam:seriesInterval");
-              if (seriesInterval != null) {
-                tStep = DataTools.parseDouble(seriesInterval.getTextContent());
+
+              // prefer setting tStep from the TIMELAPSE axis,
+              // but fall back to this if needed
+              if (seriesInterval != null && tStep == null) {
+                // units are seconds, so multiply to get milliseconds
+                tStep = DataTools.parseDouble(seriesInterval.getTextContent()) * 1000;
               }
             }
           }
@@ -1358,6 +1367,8 @@ public class OIRReader extends FormatReader {
       else if (name.equals("TIMELAPSE")) {
         if (m.sizeT <= 1) {
           m.sizeT = Integer.parseInt(size.getTextContent());
+          tStart = DataTools.parseDouble(start.getTextContent());
+          tStep = DataTools.parseDouble(step.getTextContent());
         }
       }
       else if (name.equals("LAMBDA")) {
