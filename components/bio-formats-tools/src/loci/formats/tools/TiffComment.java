@@ -40,6 +40,7 @@ import java.util.ArrayList;
 
 import loci.common.Constants;
 import loci.common.DataTools;
+import loci.common.DebugTools;
 import loci.common.RandomAccessInputStream;
 import loci.common.RandomAccessOutputStream;
 import loci.formats.FormatException;
@@ -73,8 +74,6 @@ public class TiffComment {
       return;
     }
 
-    CommandLineTools.runUpgradeCheck(args);
-
     // parse flags
     boolean edit = false;
     String newComment = null;
@@ -106,8 +105,21 @@ public class TiffComment {
           }
         }
       }
-      else System.out.println("Warning: unknown flag: " + args[i]);
+      else if (args[i].equals(CommandLineTools.VERSION)) {
+        CommandLineTools.printVersion();
+      }
+      else if (args[i].equals("-debug")) {
+        DebugTools.setRootLevel("DEBUG");
+      }
+      else if (args[i].equals("-trace")) {
+        DebugTools.setRootLevel("TRACE");
+      }
+      else if (!args[i].equals(CommandLineTools.NO_UPGRADE_CHECK)) {
+        System.out.println("Warning: unknown flag: " + args[i]);
+      }
     }
+
+    CommandLineTools.runUpgradeCheck(args);
 
     // process files
     for (String file : files) {
