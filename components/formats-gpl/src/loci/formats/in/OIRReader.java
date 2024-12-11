@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Objects;
 import javax.xml.parsers.ParserConfigurationException;
 
+import loci.common.Constants;
 import loci.common.DataTools;
 import loci.common.DateTools;
 import loci.common.Location;
@@ -1198,8 +1199,8 @@ public class OIRReader extends FormatReader {
               // prefer setting tStep from the TIMELAPSE axis,
               // but fall back to this if needed
               if (seriesInterval != null && tStep == null) {
-                // units are seconds, so multiply to get milliseconds
-                tStep = DataTools.parseDouble(seriesInterval.getTextContent()) * 1000;
+                // units are expected to be milliseconds
+                tStep = DataTools.parseDouble(seriesInterval.getTextContent());
               }
             }
           }
@@ -1367,8 +1368,12 @@ public class OIRReader extends FormatReader {
       else if (name.equals("TIMELAPSE")) {
         if (m.sizeT <= 1) {
           m.sizeT = Integer.parseInt(size.getTextContent());
-          tStart = DataTools.parseDouble(start.getTextContent());
-          tStep = DataTools.parseDouble(step.getTextContent());
+          // units are expected to be seconds, multiply to get milliseconds
+          tStart = DataTools.parseDouble(start.getTextContent()) * 1000;
+          double stepValue = DataTools.parseDouble(step.getTextContent());
+          if (stepValue > Constants.EPSILON) {
+            tStep = stepValue * 1000;
+          }
         }
       }
       else if (name.equals("LAMBDA")) {
