@@ -56,7 +56,7 @@ public class TiffComment {
     if (args.length == 0) {
       System.out.println("Usage:");
       System.out.println(
-        "tiffcomment [-set comment] [-edit] file1 [file2 ...]");
+        "tiffcomment [-version] [-debug] [-trace] [-no-upgrade] [-set comment] [-edit] file1 [file2 ...]");
       System.out.println();
 
       System.out.println("This tool requires an ImageDescription tag to be " +
@@ -71,6 +71,12 @@ public class TiffComment {
       System.out.println("  * '-', to enter the comment using stdin.  " +
         "Entering a blank line will");
       System.out.println("    terminate reading from stdin.");
+      System.out.println();
+      System.out.println("Additional options:");
+      System.out.println("    -version: print the library version");
+      System.out.println(" -no-upgrade: do not perform the upgrade check");
+      System.out.println("      -debug: enable DEBUG-level logging");
+      System.out.println("      -trace: enable TRACE-level logging");
       return;
     }
 
