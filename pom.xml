@@ -54,7 +54,7 @@
     <ome-poi.version>5.3.9</ome-poi.version>
     <ome-mdbtools.version>5.3.3</ome-mdbtools.version>
     <ome-jai.version>0.1.4</ome-jai.version>
-    <ome-codecs.version>1.0.3</ome-codecs.version>
+    <ome-codecs.version>1.1.0</ome-codecs.version>
     <jxrlib.version>0.2.4</jxrlib.version>
     <xalan.version>2.7.3</xalan.version>
     <sqlite.version>3.28.0</sqlite.version>
