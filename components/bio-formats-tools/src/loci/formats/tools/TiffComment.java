@@ -73,7 +73,7 @@ public class TiffComment {
       System.out.println("    terminate reading from stdin.");
       System.out.println();
       System.out.println("Additional options:");
-      System.out.println("    -version: print the library version");
+      System.out.println("    -version: print the library version and exit");
       System.out.println(" -no-upgrade: do not perform the upgrade check");
       System.out.println("      -debug: enable DEBUG-level logging");
       System.out.println("      -trace: enable TRACE-level logging");
@@ -113,6 +113,7 @@ public class TiffComment {
       }
       else if (args[i].equals(CommandLineTools.VERSION)) {
         CommandLineTools.printVersion();
+        return;
       }
       else if (args[i].equals("-debug")) {
         DebugTools.setRootLevel("DEBUG");
