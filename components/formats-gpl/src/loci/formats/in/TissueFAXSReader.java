@@ -579,70 +579,25 @@ public class TissueFAXSReader extends FormatReader {
     Connection conn = openConnection(region.file);
     try {
       PreparedStatement tiles = conn.prepareStatement(
-        "SELECT data, compression, row, column FROM images WHERE region=? AND level=? AND " +
-        "row>=? AND row<=? AND column>=? AND column<=? AND channel=? AND is_zstack=? AND z_position=? ORDER BY row,column"
+        "SELECT row, column FROM images WHERE region=? AND level=? AND " +
+        "channel=? AND is_zstack=? AND z_position=? ORDER BY row,column"
       );
-
-      int rowOffset = (int) Math.floor((double) region.tileRangeY[0] / scale);
-      int colOffset = (int) Math.floor((double) region.tileRangeX[0] / scale);
-
-      int startRow = (int) Math.floor((double) dest.y / region.tileSizeY) + rowOffset;
-      int startCol = (int) Math.floor((double) dest.x / region.tileSizeX) + colOffset;
-      int endRow = (int) Math.ceil((double) (dest.y + dest.height) / region.tileSizeY) + rowOffset;
-      int endCol = (int) Math.ceil((double) (dest.x + dest.width) / region.tileSizeX) + colOffset;
-
-      // if the region has TMA XY coordinates,
-      // then the row/column values in the images table for this region ID
-      // will be relative to this specific TMA block, not the overall image
-      // if we're somewhere within this TMA block, consider all FOVs for
-      // this TMA block
-      if (region.tmaX != null) {
-        int regionCol = region.tmaX * region.scaleFactor;
-        startCol -= regionCol;
-        endCol -= regionCol;
-        if (endCol >= 0 && startCol <= region.scaleFactor - 1) {
-          startCol = 0;
-          endCol = region.scaleFactor - 1;
-        }
-      }
-      if (region.tmaY != null) {
-        int regionRow = region.tmaY * region.scaleFactor;
-        startRow -= regionRow;
-        endRow -= regionRow;
-        if (endRow >= 0 && startRow <= region.scaleFactor - 1) {
-          startRow = 0;
-          endRow = region.scaleFactor - 1;
-        }
-      }
 
       tiles.setInt(1, region.id);
       tiles.setInt(2, level);
-      tiles.setInt(3, startRow);
-      tiles.setInt(4, endRow);
-      tiles.setInt(5, startCol);
-      tiles.setInt(6, endCol);
+      tiles.setInt(3, zct[1] + 1);
+      tiles.setInt(4, zct[0] > 0 ? 1 : 0);
+      tiles.setInt(5, region.zSteps[zct[0]]);
 
-      tiles.setInt(7, zct[1] + 1);
-      tiles.setInt(8, zct[0] > 0 ? 1 : 0);
-      tiles.setInt(9, region.zSteps[zct[0]]);
+      CodecOptions options = new CodecOptions();
+      options.bitsPerSample = bpp * 8;
+      options.width = region.tileSizeX;
+      options.height = region.tileSizeY;
 
       ResultSet subsetTiles = tiles.executeQuery();
       while (subsetTiles.next()) {
-        byte[] data = subsetTiles.getBytes(1);
-        int compression = subsetTiles.getInt(2);
-        int row = subsetTiles.getInt(3);
-        int column = subsetTiles.getInt(4);
-
-        LOGGER.debug("found {} bytes for row={}, column={}",
-          data.length, row, column);
-
-        CodecOptions options = new CodecOptions();
-        options.bitsPerSample = bpp * 8;
-        options.width = region.tileSizeX;
-        options.height = region.tileSizeY;
-
-        Codec codec = getCodec(compression);
-        byte[] tile = codec.decompress(data, options);
+        int row = subsetTiles.getInt(1);
+        int column = subsetTiles.getInt(2);
 
         int regionRow = row;
         int regionColumn = column;
@@ -660,7 +615,6 @@ public class TissueFAXSReader extends FormatReader {
         int pixelRow = relativeRow * options.height;
 
         // overlap handling
-        byte[][] fovs = null;
         Region[] fovPositions = new Region[scale * scale];
         if (level == 0) {
           Region fov = region.fovs.get(row + "-" + column);
@@ -677,13 +631,9 @@ public class TissueFAXSReader extends FormatReader {
           }
 
           fovPositions[0] = new Region(pixelColumn, pixelRow, options.width, options.height);
-          fovs = new byte[1][];
-          fovs[0] = tile;
         }
         else {
-          fovs = splitFOVs(region, tile, scale);
-
-          for (int f=0; f<fovs.length; f++) {
+          for (int f=0; f<fovPositions.length; f++) {
             int fovRow = row*scale + (f / scale);
             int fovColumn = column*scale + (f % scale);
             Region fov = region.fovs.get(fovRow + "-" + fovColumn);
@@ -695,13 +645,50 @@ public class TissueFAXSReader extends FormatReader {
           }
         }
 
-        for (int f=0; f<fovs.length; f++) {
+        byte[][] fovs = null;
+        for (int f=0; f<fovPositions.length; f++) {
           if (fovPositions[f] == null) {
             continue;
           }
           Region intersection = fovPositions[f].intersection(dest);
 
           if (intersection.width > 0 && intersection.height > 0) {
+            // if we actually want to copy data from this FOV, fetch and decompress it
+            if (fovs == null) {
+              PreparedStatement readTile = conn.prepareStatement(
+                "SELECT data, compression FROM images WHERE region=? AND level=? AND " +
+                "channel=? AND is_zstack=? AND z_position=? AND row=? AND column=?"
+              );
+
+              readTile.setInt(1, region.id);
+              readTile.setInt(2, level);
+              readTile.setInt(3, zct[1] + 1);
+              readTile.setInt(4, zct[0] > 0 ? 1 : 0);
+              readTile.setInt(5, region.zSteps[zct[0]]);
+              readTile.setInt(6, row);
+              readTile.setInt(7, column);
+
+              ResultSet resultTile = readTile.executeQuery();
+              if (resultTile.next()) {
+                byte[] data = resultTile.getBytes(1);
+                int compression = resultTile.getInt(2);
+
+                Codec codec = getCodec(compression);
+                byte[] tile = codec.decompress(data, options);
+                if (level == 0) {
+                  fovs = new byte[1][];
+                  fovs[0] = tile;
+                }
+                else {
+                  fovs = splitFOVs(region, tile, scale);
+                }
+              }
+              else {
+                throw new FormatException(
+                  "Could not get tile for row=" + row + ", column=" + column);
+              }
+            }
+
             int outputRowLen = dest.width * bpp;
             int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
             int rowLen = bpp * (int) Math.min(intersection.width, fovPositions[f].width);
