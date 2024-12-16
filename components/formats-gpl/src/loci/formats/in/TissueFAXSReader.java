@@ -634,12 +634,20 @@ public class TissueFAXSReader extends FormatReader {
         }
         else {
           for (int f=0; f<fovPositions.length; f++) {
+            // row and column are relative to the current resolution level
+            // need to convert to row and column indexes relative to the full resolution (level 0)
             int fovRow = row*scale + (f / scale);
             int fovColumn = column*scale + (f % scale);
             Region fov = region.fovs.get(fovRow + "-" + fovColumn);
             if (fov != null) {
-              int xx = (fovColumn * options.width / scale) - (fov.x / scale) - (fovColumn * scaledOverlapX);
-              int yy = (fovRow * options.height / scale) - (fov.y / scale) - (fovRow * scaledOverlapY);
+              // correct the row and column indexes so that the first acquired row/column
+              // relative to the full resolution lines up with (0,0) in the current resolution
+              // failing to correct for the first acquired row/column means a black border
+              // will appear at the top and/or left of the current resolutin image
+              int relativeFOVRow = fovRow - region.tileRangeY[0];
+              int relativeFOVColumn = fovColumn - region.tileRangeX[0];
+              int xx = (relativeFOVColumn * options.width / scale) - (fov.x / scale) - (relativeFOVColumn * scaledOverlapX);
+              int yy = (relativeFOVRow * options.height / scale) - (fov.y / scale) - (relativeFOVRow * scaledOverlapY);
               fovPositions[f] = new Region(xx, yy, options.width / scale, options.height / scale);
             }
           }
