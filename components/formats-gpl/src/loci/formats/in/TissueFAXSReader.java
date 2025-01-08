@@ -89,7 +89,7 @@ public class TissueFAXSReader extends FormatReader {
 
   /** Constructs a new TissueGnostics TissueFAXS reader.*/
   public TissueFAXSReader() {
-    super("TissueFAXS", new String[] {"aqproj"});
+    super("TissueFAXS", new String[] {"aqproj", "tfcyto"});
     hasCompanionFiles = false;
     domains = new String[] {FormatTools.HISTOLOGY_DOMAIN};
     datasetDescription = "An .aqproj file with one or more .tfcyto database files";
@@ -142,10 +142,13 @@ public class TissueFAXSReader extends FormatReader {
     FormatTools.assertId(currentId, true, 1);
 
     ArrayList<String> files = new ArrayList<String>();
-    files.add(getCurrentFile());
+    files.add(new Location(getCurrentFile()).getAbsolutePath());
     if (!noPixels) {
       try {
-        files.add(getRegion().file);
+        String regionFile = getRegion().file;
+        if (!files.contains(regionFile)) {
+          files.add(regionFile);
+        }
       }
       catch (FormatException e) {
         LOGGER.warn("Could not get file", e);
@@ -446,7 +449,16 @@ public class TissueFAXSReader extends FormatReader {
 
   // -- Helper methods --
 
+  /**
+   * If a .tfcyto file was provided, then that is the only file that should be read.
+   * If an .aqproj file was provided, look for all associated .tfcyto files.
+   */
   private void findDBFiles() {
+    if (checkSuffix(getCurrentFile(), "tfcyto")) {
+      pixelsFiles.add(new Location(getCurrentFile()).getAbsolutePath());
+      return;
+    }
+
     Location dir = new Location(getCurrentFile()).getAbsoluteFile().getParentFile();
     String[] list = dir.list(true);
     Arrays.sort(list);
