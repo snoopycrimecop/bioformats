@@ -368,6 +368,9 @@ public class JDCEReader extends FormatReader {
     int positionYIndex = columns.indexOf("PositionYUm");
     int positionZIndex = columns.indexOf("PositionZUm");
 
+    int imageWidthIndex = columns.indexOf("ImageSizeXPx");
+    int imageHeightIndex = columns.indexOf("ImageSizeYPx");
+
     Double smallestTimestamp = null;
 
     JDCEWell currentWell = null;
@@ -410,6 +413,8 @@ public class JDCEReader extends FormatReader {
       p.positionX = FormatTools.getStagePosition(DataTools.parseDouble(line[positionXIndex]), UNITS.MICROMETER);
       p.positionY = FormatTools.getStagePosition(DataTools.parseDouble(line[positionYIndex]), UNITS.MICROMETER);
       p.positionZ = FormatTools.getStagePosition(DataTools.parseDouble(line[positionZIndex]), UNITS.MICROMETER);
+      p.sizeX = Integer.parseInt(line[imageWidthIndex]);
+      p.sizeY = Integer.parseInt(line[imageHeightIndex]);
       currentWell.addPlaneMetadata(p, position);
 
       if (firstFile) {
@@ -419,8 +424,6 @@ public class JDCEReader extends FormatReader {
           }
           helper.setId(imagePath);
           CoreMetadata m = helper.getCoreMetadataList().get(0);
-          ms0.sizeX = m.sizeX;
-          ms0.sizeY = m.sizeY;
           ms0.pixelType = m.pixelType;
           ms0.littleEndian = m.littleEndian;
           ms0.sizeC *= m.sizeC;
@@ -435,7 +438,18 @@ public class JDCEReader extends FormatReader {
     }
     for (JDCEWell well : wells) {
       for (int f=0; f<well.getFieldCount(); f++) {
-        core.add(new CoreMetadata(ms0));
+        CoreMetadata m = new CoreMetadata(ms0);
+        // an XY size is stored for every plane
+        // different wells/fields in particular may have different sizes
+        // for each field, the largest plane dimension is selected
+        for (int plane=0; plane<m.imageCount; plane++) {
+          PlaneMetadata p = well.getPlaneMetadata(f, getZCTCoords(plane));
+          if (p != null) {
+            m.sizeX = (int) Math.max(m.sizeX, p.sizeX);
+            m.sizeY = (int) Math.max(m.sizeY, p.sizeY);
+          }
+        }
+        core.add(m);
       }
     }
     core.remove(0);
@@ -579,5 +593,8 @@ public class JDCEReader extends FormatReader {
     public Length positionX;
     public Length positionY;
     public Length positionZ;
+
+    public int sizeX;
+    public int sizeY;
   }
 }
