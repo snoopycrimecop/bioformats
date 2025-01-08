@@ -361,6 +361,7 @@ public class TissueFAXSReader extends FormatReader {
       if (m.sizeC == 1 && m.pixelType == FormatTools.UINT8) {
         m.sizeC = 3;
         m.rgb = true;
+        m.interleaved = true;
       }
 
       m.dimensionOrder = "XYCZT";
@@ -539,9 +540,10 @@ public class TissueFAXSReader extends FormatReader {
     byte[][] fovs = new byte[scale * scale][];
     int bpp = FormatTools.getBytesPerPixel(getPixelType());
     int channels = getRGBChannelCount();
+    int pixel = bpp * channels;
 
-    int srcWidth = region.tileSizeX * bpp;
-    int destWidth = (region.tileSizeX / scale) * bpp;
+    int srcWidth = region.tileSizeX * pixel;
+    int destWidth = (region.tileSizeX / scale) * pixel;
     int srcHeight = region.tileSizeY;
     int destHeight = region.tileSizeY / scale;
 
@@ -549,18 +551,13 @@ public class TissueFAXSReader extends FormatReader {
       int fovRow = fov / scale;
       int fovCol = fov % scale;
 
-      fovs[fov] = new byte[destWidth * destHeight * bpp * channels];
+      fovs[fov] = new byte[destWidth * destHeight * pixel];
 
-      for (int c=0; c<channels; c++) {
-        int srcChannelOffset = c * srcWidth * srcHeight;
-        int destChannelOffset = c * destWidth * destHeight;
+      for (int row=0; row<destHeight; row++) {
+        int srcOffset = (((fovRow * destHeight) + row) * srcWidth) + (fovCol * destWidth);
+        int destOffset = row * destWidth;
 
-        for (int row=0; row<destHeight; row++) {
-          int srcOffset = srcChannelOffset + (((fovRow * destHeight) + row) * srcWidth) + (fovCol * destWidth);
-          int destOffset = destChannelOffset + (row * destWidth);
-
-          System.arraycopy(tile, srcOffset, fovs[fov], destOffset, destWidth);
-        }
+        System.arraycopy(tile, srcOffset, fovs[fov], destOffset, destWidth);
       }
     }
 
@@ -593,6 +590,7 @@ public class TissueFAXSReader extends FormatReader {
       options.bitsPerSample = bpp * 8;
       options.width = region.tileSizeX;
       options.height = region.tileSizeY;
+      options.interleaved = isInterleaved();
 
       ResultSet subsetTiles = tiles.executeQuery();
       while (subsetTiles.next()) {
@@ -697,22 +695,20 @@ public class TissueFAXSReader extends FormatReader {
               }
             }
 
-            int outputRowLen = dest.width * bpp;
+            int pixel = bpp * getRGBChannelCount();
+            int outputRowLen = dest.width * pixel;
             int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
-            int rowLen = bpp * (int) Math.min(intersection.width, fovPositions[f].width);
+            int rowLen = pixel * (int) Math.min(intersection.width, fovPositions[f].width);
 
             int outputRow = intersection.y - dest.y;
             int outputCol = intersection.x - dest.x;
-            int outputOffset = outputRow * outputRowLen + outputCol * bpp;
-            for (int c=0; c<getRGBChannelCount(); c++) {
-              int srcChannelOffset = c * (fovs[f].length / getRGBChannelCount());
-              int destChannelOffset = c * dest.width * dest.height * bpp;
-              for (int copyRow=0; copyRow<intersection.height; copyRow++) {
-                int realRow = copyRow + intersection.y - fovPositions[f].y;
-                int inputOffset = bpp * (realRow * (region.tileSizeX / scale) + intersectionX);
-                System.arraycopy(fovs[f], srcChannelOffset + inputOffset,
-                  buf, destChannelOffset + outputOffset + copyRow*outputRowLen, rowLen);
-              }
+            int outputOffset = outputRow * outputRowLen + outputCol * pixel;
+
+            for (int copyRow=0; copyRow<intersection.height; copyRow++) {
+              int realRow = copyRow + intersection.y - fovPositions[f].y;
+              int inputOffset = pixel * (realRow * (region.tileSizeX / scale) + intersectionX);
+              System.arraycopy(fovs[f], inputOffset,
+                buf, outputOffset + copyRow*outputRowLen, rowLen);
             }
           }
         }
