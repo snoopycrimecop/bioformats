@@ -58,6 +58,7 @@ import loci.formats.meta.MetadataStore;
 import ome.units.UNITS;
 import ome.units.quantity.Length;
 import ome.units.quantity.Time;
+import ome.xml.model.enums.AcquisitionMode;
 import ome.xml.model.primitives.Color;
 import ome.xml.model.primitives.NonNegativeInteger;
 import ome.xml.model.primitives.PositiveInteger;
@@ -426,9 +427,16 @@ public class TissueFAXSReader extends FormatReader {
       store.setPixelsPhysicalSizeX(FormatTools.getPhysicalSizeX(physicalX), imageIndex);
       store.setPixelsPhysicalSizeY(FormatTools.getPhysicalSizeY(physicalY), imageIndex);
 
+      String acquisitionMode = region.regionMetadata.getString("AcquisitionMode");
+      AcquisitionMode mode = getAcquisitionMode(acquisitionMode);
+
       for (int c=0; c<region.channels.size(); c++) {
         Channel ch = region.channels.get(c);
         store.setChannelName(ch.name, imageIndex, c);
+
+        if (mode != null) {
+          store.setChannelAcquisitionMode(mode, imageIndex, c);
+        }
 
         if (ch.emWave >= WAVE_MIN && ch.emWave <= WAVE_MAX) {
           store.setChannelEmissionWavelength(FormatTools.getWavelength((double) ch.emWave), imageIndex, c);
