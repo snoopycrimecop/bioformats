@@ -489,12 +489,19 @@ public class JDCEReader extends FormatReader {
           store.setChannelExcitationWavelength(excitationWavelengths[c], imageIndex, c);
         }
 
+        boolean firstPlane = true;
         for (int plane=0; plane<getImageCount(); plane++) {
           PlaneMetadata p = well.getPlaneMetadata(f, getZCTCoords(plane));
           if (p != null) {
             store.setPlanePositionX(p.positionX, imageIndex, plane);
             store.setPlanePositionY(p.positionY, imageIndex, plane);
             store.setPlanePositionZ(p.positionZ, imageIndex, plane);
+
+            if (firstPlane) {
+              firstPlane = false;
+              store.setWellSamplePositionX(p.positionX, 0, w, f);
+              store.setWellSamplePositionY(p.positionY, 0, w, f);
+            }
 
             if (p.timestamp != null && smallestTimestamp != null) {
               Time stamp = FormatTools.createTime(p.timestamp - smallestTimestamp, UNITS.SECOND);
