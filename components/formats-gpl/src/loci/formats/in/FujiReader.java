@@ -118,7 +118,7 @@ public class FujiReader extends FormatReader {
     if (noPixels) {
       return new String[] {infFile};
     }
-    return new String[] {pixelsFile, infFile};
+    return new String[] {infFile, pixelsFile};
   }
 
   /* @see loci.formats.IFormatReader#fileGroupOption(String) */
@@ -142,17 +142,16 @@ public class FujiReader extends FormatReader {
   /* @see loci.formats.FormatReader#initFile(String) */
   @Override
   protected void initFile(String id) throws FormatException, IOException {
-    super.initFile(id);
-
-    if (checkSuffix(id, "inf")) {
-      infFile = new Location(id).getAbsolutePath();
-      pixelsFile = infFile.substring(0, infFile.lastIndexOf(".")) + ".img";
-    }
-    else {
+    if (!checkSuffix(id, "inf")) {
       pixelsFile = new Location(id).getAbsolutePath();
       infFile = pixelsFile.substring(0, pixelsFile.lastIndexOf(".")) + ".inf";
+      initFile(infFile);
+      return;
     }
 
+    super.initFile(id);
+    infFile = new Location(id).getAbsolutePath();
+    pixelsFile = infFile.substring(0, infFile.lastIndexOf(".")) + ".img";
     String[] lines = DataTools.readFile(infFile).split("\r{0,1}\n");
 
     int bits = Integer.parseInt(lines[5]);
