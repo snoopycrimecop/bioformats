@@ -656,8 +656,6 @@ public class CellSensReader extends FormatReader {
   /* @see loci.formats.FormatReader#initFile(String) */
   @Override
   protected void initFile(String id) throws FormatException, IOException {
-    super.initFile(id);
-
     if (!checkSuffix(id, "vsi")) {
       Location current = new Location(id).getAbsoluteFile();
       Location parent = current.getParentFile();
@@ -671,9 +669,11 @@ public class CellSensReader extends FormatReader {
         throw new FormatException("Could not find .vsi file.");
       }
       else {
-        id = vsiFile.getAbsolutePath();
+        initFile(vsiFile.getAbsolutePath());
+        return;
       }
     }
+    super.initFile(id);
 
     parser = new TiffParser(id);
     ifds = parser.getMainIFDs();
