@@ -143,9 +143,7 @@ public class FujiReader extends FormatReader {
   @Override
   protected void initFile(String id) throws FormatException, IOException {
     if (!checkSuffix(id, "inf")) {
-      pixelsFile = new Location(id).getAbsolutePath();
-      infFile = pixelsFile.substring(0, pixelsFile.lastIndexOf(".")) + ".inf";
-      initFile(infFile);
+      initFile(id.substring(0, id.lastIndexOf(".")) + ".inf");
       return;
     }
 
