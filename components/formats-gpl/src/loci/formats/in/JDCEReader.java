@@ -424,6 +424,14 @@ public class JDCEReader extends FormatReader {
           }
           helper.setId(imagePath);
           CoreMetadata m = helper.getCoreMetadataList().get(0);
+          if (p.sizeX == 0) {
+            ms0.sizeX = m.sizeX;
+            LOGGER.warn("Found image width 0 in CSV; using {} from TIFF", ms0.sizeX);
+          }
+          if (p.sizeY == 0) {
+            ms0.sizeY = m.sizeY;
+            LOGGER.warn("Found image height 0 in CSV; using {} from TIFF", ms0.sizeY);
+          }
           ms0.pixelType = m.pixelType;
           ms0.littleEndian = m.littleEndian;
           ms0.sizeC *= m.sizeC;
