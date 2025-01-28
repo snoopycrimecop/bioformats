@@ -464,7 +464,8 @@ public class InCellReader extends FormatReader {
       }
       int expectedSeries = totalImages / (getSizeZ() * getSizeC() * getSizeT());
       if (expectedSeries > 0) {
-        seriesCount = (int) Math.min(seriesCount, expectedSeries);
+        LOGGER.warn("Using series count {} but plane count indicates {}",
+          seriesCount, expectedSeries);
       }
     }
     else seriesCount = totalImages / (getSizeZ() * getSizeC() * getSizeT());
@@ -791,7 +792,7 @@ public class InCellReader extends FormatReader {
     private int wellRow, wellCol;
     private int nChannels = 0;
     private boolean doT = true;
-    private boolean doZ = true;
+    private Boolean doZ = null;
     private Image lastImage = null;
 
     @Override
@@ -908,7 +909,11 @@ public class InCellReader extends FormatReader {
         String fusion = attributes.getValue("fusion_wave");
         if (fusion.equals("false")) ms0.sizeC++;
         String mode = attributes.getValue("imaging_mode");
-        if (mode != null) {
+
+        // different wavelengths (channels) may have different imaging modes
+        // we want to allow a Z stack if one or more "3-D" imaging modes
+        // are encountered, even if some are variations on "2-D"
+        if (mode != null && (doZ == null || !doZ)) {
           doZ = mode.equals("3-D");
         }
       }
