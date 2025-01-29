@@ -421,8 +421,7 @@ public class TissueFAXSReader extends FormatReader {
         CoreMetadata correction = new CoreMetadata(m);
         correction.sizeX = start.tileSizeX;
         correction.sizeY = start.tileSizeY;
-        correction.sizeC = m.rgb ? 1 : m.sizeC;
-        correction.rgb = false;
+        correction.sizeC = m.rgb ? 4 : m.sizeC;
         correction.pixelType = FormatTools.FLOAT;
         correction.resolutionCount = 1;
         correction.littleEndian = false;
