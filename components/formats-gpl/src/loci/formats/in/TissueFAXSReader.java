@@ -178,7 +178,12 @@ public class TissueFAXSReader extends FormatReader {
     // most datasets will have a single region per plane/resolution
     // TMA data will have multiple regions for each full resolution plane
     for (ScanRegion region : planeRegions) {
-      copyRegionToBuffer(region, level, dest, zct, buf);
+      if (isCorrectionImage(region)) {
+        copyCorrectionImageToBuffer(region, dest, zct, buf);
+      }
+      else {
+        copyRegionToBuffer(region, level, dest, zct, buf);
+      }
     }
 
     return buf;
@@ -316,6 +321,36 @@ public class TissueFAXSReader extends FormatReader {
           for (int r=min; r<=max; r++) {
             currentRegion.resolutions.add(r);
           }
+
+
+          PreparedStatement correctionQuery = conn.prepareStatement(
+            "SELECT correction_images.id, channel_zstack.channel_id, channel_zstack.position " +
+            "FROM correction_images JOIN channel_zstack ON correction_images.id = channel_zstack.cor_img_id "+
+            "WHERE channel_zstack.region_id=?"
+          );
+          correctionQuery.setInt(1, currentRegion.id);
+          ResultSet correctionImgs = correctionQuery.executeQuery();
+          while (correctionImgs.next()) {
+            int correctionID = correctionImgs.getInt(1);
+            int channel = correctionImgs.getInt(2);
+            int z = correctionImgs.getInt(3);
+
+            currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
+            currentRegion.correctionImageIDs.put((channel - 1) + "-" + (z - 1), correctionID);
+          }
+          correctionQuery = conn.prepareStatement(
+            "SELECT correction_images.id, channels.id " +
+            "FROM correction_images JOIN channels ON correction_images.id = channels.cor_img_id "+
+            "WHERE channels.region_id=?"
+          );
+          correctionQuery.setInt(1, currentRegion.id);
+          correctionImgs = correctionQuery.executeQuery();
+          while (correctionImgs.next()) {
+            int correctionID = correctionImgs.getInt(1);
+            int channelID = correctionImgs.getInt(2);
+            currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
+            currentRegion.correctionImageIDs.put((channelID - 1) + "-0", correctionID);
+          }
         }
 
         PreparedStatement channelQuery = conn.prepareStatement(
@@ -372,13 +407,27 @@ public class TissueFAXSReader extends FormatReader {
       m.littleEndian = true;
 
       core.add(m);
+      ScanRegion start = regions.get(startRegionIndex);
       for (int r=1; r<m.resolutionCount; r++) {
         CoreMetadata res = new CoreMetadata(m);
-        int scale = (int) Math.pow(regions.get(startRegionIndex).scaleFactor, r);
+        int scale = (int) Math.pow(start.scaleFactor, r);
         res.sizeX /= scale;
         res.sizeY /= scale;
         res.resolutionCount = 1;
         core.add(res);
+      }
+
+      if (start.correctionImageCoreIndex != null) {
+        CoreMetadata correction = new CoreMetadata(m);
+        correction.sizeX = start.tileSizeX;
+        correction.sizeY = start.tileSizeY;
+        correction.sizeC = m.rgb ? 1 : m.sizeC;
+        correction.rgb = false;
+        correction.pixelType = FormatTools.FLOAT;
+        correction.resolutionCount = 1;
+        correction.littleEndian = false;
+
+        core.add(correction);
       }
     }
 
@@ -489,6 +538,10 @@ public class TissueFAXSReader extends FormatReader {
     int index = getCoreIndex();
     for (int i=regions.size()-1; i>=0; i--) {
       ScanRegion r = regions.get(i);
+      if (r.timepoint == t && r.correctionImageCoreIndex == index) {
+        planeRegions.add(r);
+        continue;
+      }
       if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
         int res = index - r.fullResolutionCoreIndex;
         if (r.resolutions.contains(res)) {
@@ -507,6 +560,9 @@ public class TissueFAXSReader extends FormatReader {
     int index = getCoreIndex();
     for (int i=regions.size()-1; i>=0; i--) {
       ScanRegion r = regions.get(i);
+      if (r.timepoint == t && r.correctionImageCoreIndex == index) {
+        return r;
+      }
       if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
         int res = index - r.fullResolutionCoreIndex;
         if (r.resolutions.contains(res)) {
@@ -515,6 +571,10 @@ public class TissueFAXSReader extends FormatReader {
       }
     }
     throw new FormatException("Could not find ScanRegion (core index " + index + ", t=" + t + ")");
+  }
+
+  private boolean isCorrectionImage(ScanRegion r) {
+    return getCoreIndex() == r.correctionImageCoreIndex;
   }
 
   private int getLevel() throws FormatException {
@@ -537,6 +597,15 @@ public class TissueFAXSReader extends FormatReader {
       default:
         throw new UnsupportedCompressionException("Unsupported compression: " + compression);
     }
+  }
+
+  private CodecOptions getCodecOptions(ScanRegion region) {
+    CodecOptions options = new CodecOptions();
+    options.bitsPerSample = FormatTools.getBytesPerPixel(getPixelType()) * 8;
+    options.width = region.tileSizeX;
+    options.height = region.tileSizeY;
+    options.interleaved = isInterleaved();
+    return options;
   }
 
   /**
@@ -587,7 +656,6 @@ public class TissueFAXSReader extends FormatReader {
   private void copyRegionToBuffer(ScanRegion region, int level, Region dest, int[] zct, byte[] buf)
     throws FormatException, IOException
   {
-    int bpp = FormatTools.getBytesPerPixel(getPixelType());
     int scale = (int) Math.pow(region.scaleFactor, level);
 
     int scaledOverlapX = region.overlapX / scale;
@@ -606,11 +674,7 @@ public class TissueFAXSReader extends FormatReader {
       tiles.setInt(4, zct[0] > 0 ? 1 : 0);
       tiles.setInt(5, region.zSteps[zct[0]]);
 
-      CodecOptions options = new CodecOptions();
-      options.bitsPerSample = bpp * 8;
-      options.width = region.tileSizeX;
-      options.height = region.tileSizeY;
-      options.interleaved = isInterleaved();
+      CodecOptions options = getCodecOptions(region);
 
       ResultSet subsetTiles = tiles.executeQuery();
       while (subsetTiles.next()) {
@@ -701,6 +765,7 @@ public class TissueFAXSReader extends FormatReader {
 
                 Codec codec = getCodec(compression);
                 byte[] tile = codec.decompress(data, options);
+                tile = applyTransformation(tile, region.id, level, zct[1] + 1, region.zSteps[0], row, column);
                 if (level == 0) {
                   fovs = new byte[1][];
                   fovs[0] = tile;
@@ -715,23 +780,76 @@ public class TissueFAXSReader extends FormatReader {
               }
             }
 
-            int pixel = bpp * getRGBChannelCount();
-            int outputRowLen = dest.width * pixel;
-            int intersectionX = (int) Math.max(0, dest.x - fovPositions[f].x);
-            int rowLen = pixel * (int) Math.min(intersection.width, fovPositions[f].width);
-
-            int outputRow = intersection.y - dest.y;
-            int outputCol = intersection.x - dest.x;
-            int outputOffset = outputRow * outputRowLen + outputCol * pixel;
-
-            for (int copyRow=0; copyRow<intersection.height; copyRow++) {
-              int realRow = copyRow + intersection.y - fovPositions[f].y;
-              int inputOffset = pixel * (realRow * (region.tileSizeX / scale) + intersectionX);
-              System.arraycopy(fovs[f], inputOffset,
-                buf, outputOffset + copyRow*outputRowLen, rowLen);
-            }
+            copyRegion(fovPositions[f], fovs[f], dest, buf, region.tileSizeX / scale);
           }
         }
+      }
+    }
+    catch (SQLException e) {
+      LOGGER.warn("Failed to query tiles", e);
+    }
+    finally {
+      try {
+        conn.close();
+      }
+      catch (SQLException e) {
+        LOGGER.warn("Failed to close connection", e);
+      }
+    }
+  }
+
+  private void copyRegion(Region srcRegion, byte[] src, Region destRegion, byte[] dest, int tileWidth) {
+    Region intersection = srcRegion.intersection(destRegion);
+    int bpp = FormatTools.getBytesPerPixel(getPixelType());
+    int pixel = bpp * getRGBChannelCount();
+    int outputRowLen = destRegion.width * pixel;
+    int intersectionX = (int) Math.max(0, destRegion.x - srcRegion.x);
+    int rowLen = pixel * (int) Math.min(intersection.width, srcRegion.width);
+
+    int outputRow = intersection.y - destRegion.y;
+    int outputCol = intersection.x - destRegion.x;
+    int outputOffset = outputRow * outputRowLen + outputCol * pixel;
+
+    for (int copyRow=0; copyRow<intersection.height; copyRow++) {
+      int realRow = copyRow + intersection.y - srcRegion.y;
+      int inputOffset = pixel * (realRow * tileWidth + intersectionX);
+      System.arraycopy(src, inputOffset,
+        dest, outputOffset + copyRow*outputRowLen, rowLen);
+    }
+  }
+
+  private void copyCorrectionImageToBuffer(ScanRegion region, Region dest, int[] zct, byte[] buf)
+    throws FormatException, IOException
+  {
+    if (region.timepoint != zct[2]) {
+      return;
+    }
+
+    Connection conn = openConnection(region.file);
+    try {
+      PreparedStatement correctionQuery = conn.prepareStatement(
+        "SELECT compression, data FROM correction_images WHERE id=?"
+      );
+      Integer correctionID = region.correctionImageIDs.get(zct[1] + "-" + zct[0]);
+      if (correctionID == null) {
+        correctionID = region.correctionImageIDs.get(zct[1] + "-0");
+      }
+      if (correctionID == null) {
+        return;
+      }
+      correctionQuery.setInt(1, correctionID);
+      ResultSet correctionImgs = correctionQuery.executeQuery();
+      if (correctionImgs.next()) {
+        int compression = correctionImgs.getInt(1);
+        byte[] data = correctionImgs.getBytes(2);
+
+        CodecOptions options = getCodecOptions(region);
+
+        data = getCodec(compression).decompress(data, options);
+
+        Region correction = new Region(0, 0, options.width, options.height);
+
+        copyRegion(correction, data, dest, buf, options.width);
       }
     }
     catch (SQLException e) {
@@ -781,6 +899,7 @@ public class TissueFAXSReader extends FormatReader {
     // and one or more regions with the same fullResolutionCoreIndex
     // whose resolutions list contains only 0
     public int fullResolutionCoreIndex;
+    public Integer correctionImageCoreIndex = null;
     public List<Integer> resolutions = new ArrayList<Integer>();
 
     public int tileSizeX;
@@ -794,6 +913,7 @@ public class TissueFAXSReader extends FormatReader {
     public int timepoint;
     public List<Channel> channels = new ArrayList<Channel>();
     public HashMap<String, Region> fovs = new HashMap<String, Region>();
+    public HashMap<String, Integer> correctionImageIDs = new HashMap<String, Integer>();
 
     public Integer tmaX;
     public Integer tmaY;
@@ -832,6 +952,18 @@ public class TissueFAXSReader extends FormatReader {
       int blue = color & 0xff;
       return new Color(red, green, blue, alpha);
     }
+  }
+
+  /**
+   * Extension point for doing something to an FOV immediately
+   * after decompression, before any stitching or cropping.
+   * Overriding this in a subclass could be used to apply a correction image.
+   * Currently this method is a no-op.
+   */
+  public byte[] applyTransformation(byte[] tile, int regionID, int level,
+    int channel, int zIndex, int fovRow, int fovColumn)
+  {
+    return tile;
   }
 
 }
