@@ -322,34 +322,43 @@ public class TissueFAXSReader extends FormatReader {
             currentRegion.resolutions.add(r);
           }
 
+          // older TissueFAXS data stored correction images differently,
+          // and did not include the 'channel_zstack' table
+          // catch any exceptions with the correction image queries separately,
+          // so that the rest of the data can be read even if the correction
+          // image can't be found
+          try {
+            PreparedStatement correctionQuery = conn.prepareStatement(
+              "SELECT correction_images.id, channel_zstack.channel_id, channel_zstack.position " +
+              "FROM correction_images JOIN channel_zstack ON correction_images.id = channel_zstack.cor_img_id "+
+              "WHERE channel_zstack.region_id=?"
+            );
+            correctionQuery.setInt(1, currentRegion.id);
+            ResultSet correctionImgs = correctionQuery.executeQuery();
+            while (correctionImgs.next()) {
+              int correctionID = correctionImgs.getInt(1);
+              int channel = correctionImgs.getInt(2);
+              int z = correctionImgs.getInt(3);
 
-          PreparedStatement correctionQuery = conn.prepareStatement(
-            "SELECT correction_images.id, channel_zstack.channel_id, channel_zstack.position " +
-            "FROM correction_images JOIN channel_zstack ON correction_images.id = channel_zstack.cor_img_id "+
-            "WHERE channel_zstack.region_id=?"
-          );
-          correctionQuery.setInt(1, currentRegion.id);
-          ResultSet correctionImgs = correctionQuery.executeQuery();
-          while (correctionImgs.next()) {
-            int correctionID = correctionImgs.getInt(1);
-            int channel = correctionImgs.getInt(2);
-            int z = correctionImgs.getInt(3);
-
-            currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
-            currentRegion.correctionImageIDs.put((channel - 1) + "-" + (z - 1), correctionID);
+              currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
+              currentRegion.correctionImageIDs.put((channel - 1) + "-" + (z - 1), correctionID);
+            }
+            correctionQuery = conn.prepareStatement(
+              "SELECT correction_images.id, channels.id " +
+              "FROM correction_images JOIN channels ON correction_images.id = channels.cor_img_id "+
+              "WHERE channels.region_id=?"
+            );
+            correctionQuery.setInt(1, currentRegion.id);
+            correctionImgs = correctionQuery.executeQuery();
+            while (correctionImgs.next()) {
+              int correctionID = correctionImgs.getInt(1);
+              int channelID = correctionImgs.getInt(2);
+              currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
+              currentRegion.correctionImageIDs.put((channelID - 1) + "-0", correctionID);
+            }
           }
-          correctionQuery = conn.prepareStatement(
-            "SELECT correction_images.id, channels.id " +
-            "FROM correction_images JOIN channels ON correction_images.id = channels.cor_img_id "+
-            "WHERE channels.region_id=?"
-          );
-          correctionQuery.setInt(1, currentRegion.id);
-          correctionImgs = correctionQuery.executeQuery();
-          while (correctionImgs.next()) {
-            int correctionID = correctionImgs.getInt(1);
-            int channelID = correctionImgs.getInt(2);
-            currentRegion.correctionImageCoreIndex = currentRegion.fullResolutionCoreIndex + m.resolutionCount;
-            currentRegion.correctionImageIDs.put((channelID - 1) + "-0", correctionID);
+          catch (SQLException e) {
+            LOGGER.warn("Failed to find correction image", e);
           }
         }
 
@@ -537,10 +546,12 @@ public class TissueFAXSReader extends FormatReader {
     int index = getCoreIndex();
     for (int i=regions.size()-1; i>=0; i--) {
       ScanRegion r = regions.get(i);
-      if (r.timepoint == t && r.correctionImageCoreIndex == index) {
+      if (r.timepoint == t && r.correctionImageCoreIndex != null &&
+        r.correctionImageCoreIndex == index)
+      {
         planeRegions.add(r);
         continue;
-      }
+     }
       if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
         int res = index - r.fullResolutionCoreIndex;
         if (r.resolutions.contains(res)) {
@@ -559,7 +570,9 @@ public class TissueFAXSReader extends FormatReader {
     int index = getCoreIndex();
     for (int i=regions.size()-1; i>=0; i--) {
       ScanRegion r = regions.get(i);
-      if (r.timepoint == t && r.correctionImageCoreIndex == index) {
+      if (r.timepoint == t && r.correctionImageCoreIndex != null &&
+        r.correctionImageCoreIndex == index)
+      {
         return r;
       }
       if (r.timepoint == t && r.fullResolutionCoreIndex <= index) {
@@ -573,6 +586,9 @@ public class TissueFAXSReader extends FormatReader {
   }
 
   private boolean isCorrectionImage(ScanRegion r) {
+    if (r.correctionImageCoreIndex == null) {
+      return false;
+    }
     return getCoreIndex() == r.correctionImageCoreIndex;
   }
 
