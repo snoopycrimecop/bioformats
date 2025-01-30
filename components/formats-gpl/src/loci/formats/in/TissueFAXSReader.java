@@ -448,6 +448,7 @@ public class TissueFAXSReader extends FormatReader {
     store.setInstrumentID(instrument, 0);
 
     ArrayList<Integer> populatedCoreIndexes = new ArrayList<Integer>();
+    int nextImage = 0;
     for (int i=0, index=0; i<regions.size(); index++) {
       ScanRegion region = regions.get(i);
 
@@ -458,7 +459,8 @@ public class TissueFAXSReader extends FormatReader {
         continue;
       }
       populatedCoreIndexes.add(region.fullResolutionCoreIndex);
-      int imageIndex = hasFlattenedResolutions() ? region.fullResolutionCoreIndex : index;
+      int imageIndex = hasFlattenedResolutions() ? region.fullResolutionCoreIndex : nextImage;
+      nextImage++;
 
       String objectiveID = MetadataTools.createLSID("Objective", 0, index);
       store.setObjectiveID(objectiveID, 0, index);
@@ -506,6 +508,14 @@ public class TissueFAXSReader extends FormatReader {
         if (!core.get(region.fullResolutionCoreIndex).rgb) {
           store.setChannelColor(ch.getColor(), imageIndex, c);
         }
+      }
+
+      if (region.correctionImageCoreIndex != null) {
+        int corrImage = nextImage;
+        nextImage++;
+
+        store.setImageName(region.regionMetadata.getString("Name") + " Correction Image", corrImage);
+        store.setObjectiveSettingsID(objectiveID, corrImage);
       }
 
       i += core.get(region.fullResolutionCoreIndex).sizeT;
