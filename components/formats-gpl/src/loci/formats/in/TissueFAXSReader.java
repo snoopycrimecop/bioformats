@@ -439,8 +439,6 @@ public class TissueFAXSReader extends FormatReader {
       }
     }
 
-    // TODO: parse ROIs from .aqproj
-
     MetadataStore store = makeFilterMetadata();
     MetadataTools.populatePixels(store, this);
 
