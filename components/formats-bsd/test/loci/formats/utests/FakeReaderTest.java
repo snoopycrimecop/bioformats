@@ -761,4 +761,13 @@ public class FakeReaderTest {
     assertEquals(m.getChannelEmissionWavelength(0, 4), new Length(5020.0, UNITS.ANGSTROM));
     reader.close();
   }
+
+  @Test
+  public void testInstrument() throws Exception {
+    reader.setId("test&withInstrument=true.fake");
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    assertEquals(m.getInstrumentCount(), 1);
+    reader.close();
+  }
 }

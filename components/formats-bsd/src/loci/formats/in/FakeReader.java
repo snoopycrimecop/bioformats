@@ -609,6 +609,7 @@ public class FakeReader extends FormatReader {
     boolean metadataComplete = true;
     boolean thumbnail = false;
     boolean withMicrobeam = false;
+    boolean withInstrument = false;
 
     int seriesCount = 1;
     int resolutionCount = 1;
@@ -720,6 +721,7 @@ public class FakeReader extends FormatReader {
       else if (key.equals("fields")) fields = intValue;
       else if (key.equals("plateAcqs")) plateAcqs = intValue;
       else if (key.equals("withMicrobeam")) withMicrobeam = boolValue;
+      else if (key.equals("withInstrument")) withInstrument = boolValue;
       else if (key.equals("annLong")) annLong = intValue;
       else if (key.equals("annDouble")) annDouble = intValue;
       else if (key.equals("annMap")) annMap = intValue;
@@ -852,6 +854,8 @@ public class FakeReader extends FormatReader {
         populateSPW(store, screens, plates, plateRows, plateCols, fields, plateAcqs, withMicrobeam);
       if (imageCount > 0) seriesCount = imageCount;
       else hasSPW = false; // failed to generate SPW metadata
+    } else if (withInstrument) {
+      populateInstrument(store);
     }
 
     // populate core metadata
@@ -1398,6 +1402,15 @@ public class FakeReader extends FormatReader {
     getOmeXmlService().convertMetadata(omeXmlMetadata, store);
     domains = new String[] {FormatTools.HCS_DOMAIN};
     return ome.sizeOfImageList();
+  }
+
+  private void populateInstrument(MetadataStore store)
+  {
+    final XMLMockObjects xml = new XMLMockObjects();
+    OME ome = xml.getRoot();
+    ome.addInstrument(xml.createInstrument(true));
+    getOmeXmlMetadata().setRoot(new OMEXMLMetadataRoot(ome));
+    getOmeXmlService().convertMetadata(omeXmlMetadata, store);
   }
 
   /** Creates a mapping between indices and color values. */
