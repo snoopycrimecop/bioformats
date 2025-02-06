@@ -722,4 +722,43 @@ public class FakeReaderTest {
     reader.setId("test&dimOrder=CXYZT.fake");
   }
 
+  @Test
+  public void testExcitationWavelengths() throws Exception {
+    File fakeIni = mkIni("excitationWavelengths.fake.ini",
+      "sizeC=5",
+      "excitation_0 = 502nm",
+      "excitation_1 = 502.0nm",
+      "excitation_2 = 502",
+      "excitation_4 = 5020Å");
+    reader.setId(wd.resolve("excitationWavelengths.fake").toString());
+    assertEquals(reader.getSizeC(), 5);
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    assertEquals(m.getChannelExcitationWavelength(0, 0), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(0, 1), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(0, 2), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(0, 3), null);
+    assertEquals(m.getChannelExcitationWavelength(0, 4), new Length(5020.0, UNITS.ANGSTROM));
+    reader.close();
+  }
+
+  @Test
+  public void testEmissionWavelengths() throws Exception {
+    File fakeIni = mkIni("emissionWavelengths.fake.ini",
+      "sizeC=5",
+      "emission_0 = 502nm",
+      "emission_1 = 502.0nm",
+      "emission_2 = 502",
+      "emission_4 = 5020Å");
+    reader.setId(wd.resolve("emissionWavelengths.fake").toString());
+    assertEquals(reader.getSizeC(), 5);
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    assertEquals(m.getChannelEmissionWavelength(0, 0), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(0, 1), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(0, 2), new Length(502.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(0, 3), null);
+    assertEquals(m.getChannelEmissionWavelength(0, 4), new Length(5020.0, UNITS.ANGSTROM));
+    reader.close();
+  }
 }

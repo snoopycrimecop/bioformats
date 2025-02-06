@@ -32,6 +32,8 @@
 
 package loci.formats.in;
 
+import static ome.xml.model.Channel.getEmissionWavelengthUnitXsdDefault;
+import static ome.xml.model.Channel.getExcitationWavelengthUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeXUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeYUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeZUnitXsdDefault;
@@ -617,6 +619,8 @@ public class FakeReader extends FormatReader {
 
     Integer defaultColor = null;
     ArrayList<Integer> color = new ArrayList<Integer>();
+    ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
+    ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
 
     ArrayList<IniTable> seriesTables = new ArrayList<IniTable>();
 
@@ -755,6 +759,20 @@ public class FakeReader extends FormatReader {
           color.add(null);
         }
         color.set(index, parseColor(value));
+      } else if (key.startsWith("emission_")) {
+        int index = Integer.parseInt(key.substring(key.indexOf('_') + 1));
+        while (index >= emissionWavelengths.size()) {
+          emissionWavelengths.add(null);
+        }
+        emissionWavelengths.set(index, parseWavelength(
+          value, getEmissionWavelengthUnitXsdDefault()));
+      } else if (key.startsWith("excitation_")) {
+        int index = Integer.parseInt(key.substring(key.indexOf('_') + 1));
+        while (index >= excitationWavelengths.size()) {
+          excitationWavelengths.add(null);
+        }
+        excitationWavelengths.set(index, parseWavelength(
+          value, getExcitationWavelengthUnitXsdDefault()));
       } else if (key.equals("sleepOpenBytes")) {
         sleepOpenBytes = intValue;
       } else if (key.equals("sleepInitFile")) {
@@ -894,6 +912,12 @@ public class FakeReader extends FormatReader {
         }
         if (channel != null) {
           store.setChannelColor(channel, currentImageIndex, c);
+        }
+        if (c < emissionWavelengths.size() && emissionWavelengths.get(c) != null) {
+          store.setChannelEmissionWavelength(emissionWavelengths.get(c), currentImageIndex, c);
+        }
+        if (c < excitationWavelengths.size() && excitationWavelengths.get(c) != null) {
+          store.setChannelExcitationWavelength(excitationWavelengths.get(c), currentImageIndex, c);
         }
       }
       fillAnnotations(store, currentImageIndex);
@@ -1482,6 +1506,18 @@ public class FakeReader extends FormatReader {
       return null;
     }
     return physicalSize;
+  }
+
+  private Length parseWavelength(String s, String defaultUnit) {
+    Length wavelength = FormatTools.parseLength(s, defaultUnit);
+    if (wavelength == null) {
+      throw new RuntimeException("Invalid wavelength: " + s);
+    }
+    if (!FormatTools.isPositiveValue(wavelength.value().doubleValue())) {
+      LOGGER.warn("Invalid wavelength value: {}", wavelength.value());
+      return null;
+    }
+    return wavelength;
   }
 
 }
