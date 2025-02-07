@@ -790,6 +790,33 @@ public class FakeReaderTest {
   }
 
   @Test
+  public void testWavelengthSeriesOverride() throws Exception {
+    File fakeIni = mkIni("multiseries_wavelengths.fake.ini",
+      "series=2",
+      "sizeC=2",
+      "excitation_0=340nm",
+      "emission_0=450nm",
+      "excitation_1=470nm",
+      "emission_1=512nm",
+      "[series_0]",
+      "[series_1]",
+      "ChannelExcitationWavelength_0=350.0nm",
+      "ChannelEmissionWavelength_0=425.0nm",
+      "ChannelExcitationWavelength_1=500.0nm",
+      "ChannelEmissionWavelength_1=580.0nm");
+    reader.setId(fakeIni.getAbsolutePath());
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertEquals(m.getChannelExcitationWavelength(0, 0), new Length(340.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(0, 0), new Length(450.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(0, 1), new Length(470.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(0, 1), new Length(512.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(1, 0), new Length(350.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(1, 0), new Length(425.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelExcitationWavelength(1, 1), new Length(500.0, UNITS.NANOMETER));
+    assertEquals(m.getChannelEmissionWavelength(1, 1), new Length(580.0, UNITS.NANOMETER));
+  }
+
+  @Test
   public void testInstrument() throws Exception {
     reader.setId("test&withInstrument=true.fake");
     m = service.asRetrieve(reader.getMetadataStore());
