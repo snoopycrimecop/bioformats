@@ -1244,6 +1244,18 @@ public class FakeReader extends FormatReader {
     for (int c=0; c<getEffectiveSizeC(); c++) {
       String channelName = table.get("ChannelName_" + c);
       store.setChannelName(channelName, newSeries, c);
+      String emissionWavelength = table.get("ChannelEmissionWavelength_" + c);
+      if (emissionWavelength != null) {
+        store.setChannelEmissionWavelength(
+          parseWavelength(emissionWavelength, getEmissionWavelengthUnitXsdDefault()),
+          newSeries, c);
+      }
+      String excitationWavelength = table.get("ChannelExcitationWavelength_" + c);
+      if (excitationWavelength != null) {
+        store.setChannelExcitationWavelength(
+          parseWavelength(excitationWavelength, getExcitationWavelengthUnitXsdDefault()),
+          newSeries, c);
+      }
     }
 
     for (int i=0; i<getImageCount(); i++) {
