@@ -152,6 +152,10 @@ public class FakeReader extends FormatReader {
   /* physical sizes */
   private Length physicalSizeX, physicalSizeY, physicalSizeZ;
 
+  /* channel wavelengths */
+  ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
+  ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
+
   /* annotation counts per file */
   private int annBool = 0;
   private int annComment = 0;
@@ -511,6 +515,8 @@ public class FakeReader extends FormatReader {
     plateCols = 0;
     fields = 0;
     plateAcqs = 0;
+    excitationWavelengths.clear();
+    emissionWavelengths.clear();
     super.close(fileOnly);
   }
 
@@ -620,8 +626,6 @@ public class FakeReader extends FormatReader {
 
     Integer defaultColor = null;
     ArrayList<Integer> color = new ArrayList<Integer>();
-    ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
-    ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
 
     ArrayList<IniTable> seriesTables = new ArrayList<IniTable>();
 
@@ -900,6 +904,7 @@ public class FakeReader extends FormatReader {
     MetadataTools.populatePixels(store, this, planeInfo);
     fillExposureTime(store);
     fillPhysicalSizes(store);
+    fillChannelWavelengths(store);
     for (int currentImageIndex=0; currentImageIndex<seriesCount; currentImageIndex++) {
       if (currentImageIndex < seriesTables.size()) {
         parseSeriesTable(seriesTables.get(currentImageIndex), store, currentImageIndex);
@@ -916,12 +921,6 @@ public class FakeReader extends FormatReader {
         }
         if (channel != null) {
           store.setChannelColor(channel, currentImageIndex, c);
-        }
-        if (c < emissionWavelengths.size() && emissionWavelengths.get(c) != null) {
-          store.setChannelEmissionWavelength(emissionWavelengths.get(c), currentImageIndex, c);
-        }
-        if (c < excitationWavelengths.size() && excitationWavelengths.get(c) != null) {
-          store.setChannelExcitationWavelength(excitationWavelengths.get(c), currentImageIndex, c);
         }
       }
       fillAnnotations(store, currentImageIndex);
@@ -986,6 +985,19 @@ public class FakeReader extends FormatReader {
       }
     }
     setSeries(oldSeries);
+  }
+
+  private void fillChannelWavelengths(MetadataStore store) {
+    for (int s=0; s<getSeriesCount(); s++) {
+      for (int c=0; c<getEffectiveSizeC(); c++) {
+        if (c < emissionWavelengths.size() && emissionWavelengths.get(c) != null) {
+          store.setChannelEmissionWavelength(emissionWavelengths.get(c), s, c);
+        }
+        if (c < excitationWavelengths.size() && excitationWavelengths.get(c) != null) {
+          store.setChannelExcitationWavelength(excitationWavelengths.get(c), s, c);
+        }
+      }
+    }
   }
 
   private void fillAcquisitionDate(MetadataStore store, String date, int imageIndex) {
