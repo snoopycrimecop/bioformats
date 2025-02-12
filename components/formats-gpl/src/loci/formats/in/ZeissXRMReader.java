@@ -47,6 +47,11 @@ import loci.formats.meta.MetadataStore;
 import loci.formats.services.POIService;
 import loci.formats.services.POIServiceImpl;
 
+import ome.units.UNITS;
+import ome.units.quantity.Length;
+import ome.units.quantity.Time;
+import ome.xml.model.primitives.Timestamp;
+
 /**
  * ZeissXRMReader is the file format reader for Zeiss X-Ray Microscopy
  * .txm and .txrm files.
@@ -55,7 +60,23 @@ public class ZeissXRMReader extends FormatReader {
 
   // -- Constants --
 
-  private static final String IMAGE_INFO = "Root Entry/ImageInfo/";
+  private static final String DATESTAMP = "mm/dd/yyyy HH:mm:ss.SSS";
+
+  // parent paths for various metadata values
+  private static final String IMAGE_INFO_PATH = "Root Entry/ImageInfo/";
+  private static final String RECON_SETTINGS_PATH = "Root Entry/ReconSettings/";
+  private static final String AUTORECON_PATH = "Root Entry/AutoRecon/";
+  private static final String REFERENCE_PATH = "Root Entry/ReferenceData/";
+
+  // prefixes for organizing original metadata
+  private static final String POSITIONS = "Positions: ";
+  private static final String DATASET = "Dataset Info: ";
+  private static final String RECON_SETTINGS = "Reconstruction Settings: ";
+  private static final String IMAGE_DETAILS = "Image Details: ";
+  private static final String SOURCE_ASSEMBLY = "Source Assembly Info: ";
+  private static final String GENERAL_PARAMS = "General Parameters: ";
+  private static final String PROJECTION = "Projection Info: ";
+  private static final String ACTUAL_POSITIONS = "Actual Positions: ";
 
   // -- Fields --
 
@@ -127,15 +148,29 @@ public class ZeissXRMReader extends FormatReader {
   protected void initFile(String id) throws FormatException, IOException {
     super.initFile(id);
 
+    String suffix = getCurrentFile().substring(getCurrentFile().lastIndexOf(".") + 1);
+    boolean isTXM = suffix.equalsIgnoreCase("txm");
+    boolean isTXRM = suffix.equalsIgnoreCase("txrm");
+
     CoreMetadata m = core.get(0);
 
     initPOIService();
 
     final List<String> allFiles = poi.getDocumentList();
+    allFiles.sort(null);
     if (allFiles.isEmpty()) {
       throw new FormatException(
         "No files were found - the .cxd may be corrupt.");
     }
+
+    Double pixelSize = null;
+    double[] exposureTimes = null;
+    double[] current = null;
+    double[] voltage = null;
+    double[] xPos = null;
+    double[] yPos = null;
+    double[] zPos = null;
+    String[] datestamps = null;
 
     for (String name : allFiles) {
       if (name.startsWith("Root Entry/ImageData")) {
@@ -151,16 +186,245 @@ public class ZeissXRMReader extends FormatReader {
       try (RandomAccessInputStream stream = poi.getDocumentStream(name)) {
         stream.order(true);
 
-        if (name.equals(IMAGE_INFO + "ImageWidth")) {
+        // type-specific metadata may be present in both types of files,
+        // but will likely be invalid (sometimes in a misleading or confusing way)
+
+        // txm-specific metadata
+        if (isTXM) {
+          if (name.equals(AUTORECON_PATH + "MeanSampleX")) {
+            addGlobalMeta(POSITIONS + "Mean sample X (µm)", stream.readFloat());
+          }
+          else if (name.equals(AUTORECON_PATH + "MeanSampleY")) {
+            addGlobalMeta(POSITIONS + "Mean sample Y (µm)", stream.readFloat());
+          }
+          else if (name.equals(AUTORECON_PATH + "MeanSampleZ")) {
+            addGlobalMeta(POSITIONS + "Mean sample Z (µm)", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "OutputFileLocation")) {
+            addGlobalMeta(RECON_SETTINGS + "Output file location", readAsString(stream));
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "InputFileName")) {
+            addGlobalMeta(RECON_SETTINGS + "Input filename", readAsString(stream));
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "CenterShift")) {
+            addGlobalMeta(RECON_SETTINGS + "Center shift", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "BeamHardeningFileName")) {
+            addGlobalMeta(RECON_SETTINGS + "Beam hardening", readAsString(stream));
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "BeamHardening")) {
+            addGlobalMeta(RECON_SETTINGS + "Beam-hardening constant", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "RotationAngle")) {
+            addGlobalMeta(RECON_SETTINGS + "Rotation angle", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "ReconFilterChoice")) {
+            int filter = stream.readInt();
+            String filterName = String.valueOf(filter);
+            // this is very likely an enum, but we don't know all of the possible values
+            if (filter == 2) {
+              filterName = "Smooth";
+            }
+            else {
+              LOGGER.warn("Could not identify reconstruction filter type: {}", filter);
+            }
+            addGlobalMeta(RECON_SETTINGS + "Recon filter", filterName);
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "ReconFilterSmoothFactor")) {
+            addGlobalMeta(RECON_SETTINGS + "Sigma", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "ReconScalingEnum")) {
+            int scaling = stream.readInt();
+            String scalingType = String.valueOf(scaling);
+            // this is very likely an enum, but we don't know all of the possible values
+            if (scaling == 0) {
+              scalingType = "Global";
+            }
+            else {
+              LOGGER.warn("Could not identify reconstruction scaling: {}", scaling);
+            }
+
+            addGlobalMeta(RECON_SETTINGS + "Recon scaling", scalingType);
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "GlobalMax")) {
+            addGlobalMeta(RECON_SETTINGS + "Global max", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "GlobalMin")) {
+            addGlobalMeta(RECON_SETTINGS + "Global min", stream.readFloat());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "UserMinMax")) {
+            addGlobalMeta(RECON_SETTINGS + "User min-max", getYesNo(stream));
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "UseCTScaleFilter")) {
+            addGlobalMeta(RECON_SETTINGS + "Use CT-Scaling", getYesNo(stream));
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "CTScaleFilter")) {
+            addGlobalMeta(RECON_SETTINGS + "CT-scale name", readAsString(stream));
+          }
+          else if (name.equals(AUTORECON_PATH + "StoRADistance")) {
+            // dividing by -1000 is intentional, this matches what DataExplorer shows
+            float sRADistance = stream.readFloat() / -1000;
+
+            addGlobalMeta(POSITIONS + "Source to RA (mm)", sRADistance);
+            addGlobalMeta(GENERAL_PARAMS + "Source-RA (mm)", sRADistance);
+          }
+          else if (name.equals(AUTORECON_PATH + "DtoRADistance")) {
+            float dRADistance = stream.readFloat() / 1000;
+
+            addGlobalMeta(POSITIONS + "Detector to RA (mm)", dRADistance);
+            addGlobalMeta(GENERAL_PARAMS + "Detector-RA (mm)", dRADistance);
+          }
+          else if (name.equals(AUTORECON_PATH + "NumOfProjects")) {
+            addGlobalMeta(GENERAL_PARAMS + "Number of projections used", stream.readInt());
+          }
+          else if (name.equals(RECON_SETTINGS_PATH + "ReconServiceVersion")) {
+            addGlobalMeta(DATASET + "Recon Service Version", readAsString(stream));
+          }
+        }
+
+        // txrm-specific metadata
+        if (isTXRM) {
+          if (name.equals(REFERENCE_PATH + "ImageInfo/XrayMagnification")) {
+            addGlobalMeta(PROJECTION + "Geometric Magnification", stream.readFloat());
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "XrayCurrent")) {
+            current = readAsDoubles(stream);
+            addMetadataList(current, PROJECTION + "X-ray current (µA)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "XPosition")) {
+            xPos = readAsDoubles(stream);
+            addMetadataList(xPos, ACTUAL_POSITIONS + "Sample X (µm)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "YPosition")) {
+            yPos = readAsDoubles(stream);
+            addMetadataList(yPos, ACTUAL_POSITIONS + "Sample Y (µm)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "ZPosition")) {
+            zPos = readAsDoubles(stream);
+            addMetadataList(zPos, ACTUAL_POSITIONS + "Sample Z (µm)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "StoRADistance")) {
+            double[] sourceZ = readAsDoubles(stream);
+            addMetadataList(sourceZ, ACTUAL_POSITIONS + "Source Z (mm)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "Angles")) {
+            double[] theta = readAsDoubles(stream);
+            addMetadataList(theta, ACTUAL_POSITIONS + "Sample Theta (deg)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "DtoRADistance")) {
+            double[] detectorZ = readAsDoubles(stream);
+            addMetadataList(detectorZ, ACTUAL_POSITIONS + "Detector Z (mm)");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "FanAngle")) {
+            double[] fanAngle = readAsDoubles(stream);
+            addMetadataList(fanAngle, PROJECTION + "Fan angle");
+          }
+          else if (name.equals(IMAGE_INFO_PATH + "ConeAngle")) {
+            double[] coneAngle = readAsDoubles(stream);
+            addMetadataList(coneAngle, PROJECTION + "Cone angle");
+          }
+        }
+
+        // common metadata
+
+        String paramsPrefix = isTXM ? GENERAL_PARAMS : PROJECTION;
+
+        if (name.equals(IMAGE_INFO_PATH + "ImageWidth")) {
           m.sizeX = stream.readInt();
+          addGlobalMeta(IMAGE_DETAILS + "Image width (pixels)", m.sizeX);
         }
-        else if (name.equals(IMAGE_INFO + "ImageHeight")) {
+        else if (name.equals(IMAGE_INFO_PATH + "ImageHeight")) {
           m.sizeY = stream.readInt();
+          addGlobalMeta(IMAGE_DETAILS + "Image height (pixels)", m.sizeY);
         }
-        else if (name.equals(IMAGE_INFO + "DataType")) {
-          m.pixelType = getPixelType(stream.readInt());
+        else if (name.equals(IMAGE_INFO_PATH + "DataType")) {
+          int type = stream.readInt();
+          m.pixelType = getPixelType(type);
+          if (isTXM) {
+            addGlobalMeta(RECON_SETTINGS + "Output data type", getMetadataPixelType(type));
+          }
+          addGlobalMeta(IMAGE_DETAILS + "Data type", getMetadataPixelType(type));
         }
-        ///* debug */ System.out.println(name + " (" + stream.length() + " bytes)");
+        else if (name.equals(IMAGE_INFO_PATH + "FileType")) {
+          addGlobalMeta(IMAGE_DETAILS + "File type", stream.readString(4));
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "PixelSize")) {
+          pixelSize = (double) stream.readFloat();
+          addGlobalMeta(IMAGE_DETAILS + "Pixel size (µm)", pixelSize);
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "AcquisitionMode")) {
+          int mode = stream.readInt();
+          String modeValue = String.valueOf(mode);
+          if (mode == 0) {
+            modeValue = "Tomography";
+          }
+          else if (mode == 10) {
+            modeValue = "Recon";
+          }
+          else {
+            LOGGER.warn("Could not identify acquisition mode: {}", mode);
+          }
+
+          addGlobalMeta(IMAGE_DETAILS + "Acquisition mode", modeValue);
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "Current") && current == null) {
+          current = readAsDoubles(stream);
+          addGlobalMeta(SOURCE_ASSEMBLY + "Current (µA)", current[0]);
+          if (isTXM) {
+            addGlobalMeta(GENERAL_PARAMS + "X-ray current (µA)", current[0]);
+          }
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "XrayVoltage") && voltage == null) {
+          voltage = readAsDoubles(stream);
+          addMetadataList(voltage, paramsPrefix + "X-ray voltage (kV)");
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "SourceFilterName")) {
+          String sourceFilter = readAsString(stream);
+          addGlobalMeta(SOURCE_ASSEMBLY + "Source Filter Name", sourceFilter);
+          addGlobalMeta(paramsPrefix + "Source filter name", sourceFilter);
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "Voltage")) {
+          addGlobalMeta(SOURCE_ASSEMBLY + "Voltage (kV)", stream.readFloat());
+        }
+        else if (name.equals("Root Entry/exeVersion")) {
+          addGlobalMeta(DATASET + "Executable version", readAsString(stream));
+        }
+        else if (name.equals("Root Entry/DetAssemblyInfo/LensInfo/LensName")) {
+          String objective = readAsString(stream);
+          addGlobalMeta(paramsPrefix + "Objective name", objective);
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "CameraNumberOfFramesPerImage")) {
+          addGlobalMeta(paramsPrefix + "Frames per image", stream.readInt());
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "NoOfImagesAveraged")) {
+          addGlobalMeta(paramsPrefix + "Images per projection", stream.readInt());
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "ExpTimes")) {
+          exposureTimes = readAsDoubles(stream);
+          if (exposureTimes.length > 1) {
+            addGlobalMeta(paramsPrefix + "Exposure time (s)", exposureTimes[0]);
+          }
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "CameraBinning")) {
+          addGlobalMeta(paramsPrefix + "Camera binning", stream.readInt());
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "ReadOutTime")) {
+          addGlobalMeta(paramsPrefix + "Camera Readout Speed", stream.readInt());
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "Temperature")) {
+          addGlobalMeta(paramsPrefix + "Camera Temperature", stream.readInt());
+        }
+        else if (name.equals(IMAGE_INFO_PATH + "Date")) {
+          datestamps = new String[(int) (stream.length() / 40)];
+          for (int i=0; i<datestamps.length; i++) {
+            datestamps[i] = stream.readString(DATESTAMP.length());
+            stream.skipBytes(40 - DATESTAMP.length());
+            addGlobalMetaList(paramsPrefix + "Date", datestamps[i]);
+          }
+        }
+        else if (stream.getFilePointer() == 0) {
+          LOGGER.trace("Skipped '{}' ({}) bytes", name, stream.length());
+        }
       }
     }
 
@@ -171,8 +435,60 @@ public class ZeissXRMReader extends FormatReader {
     m.dimensionOrder = "XYZTC";
     m.littleEndian = true;
 
+    addGlobalMeta(DATASET + "Data file name", new Location(getCurrentFile()).getAbsolutePath());
+    if (isTXM) {
+      addGlobalMeta(RECON_SETTINGS + "Output file-format", suffix);
+
+      if (current != null && voltage != null) {
+        addGlobalMeta(GENERAL_PARAMS + "X-ray power (W)", (current[0] * voltage[0]) / 1000);
+      }
+    }
+    else if (isTXRM) {
+      if (current != null && voltage != null) {
+        for (int i=0; i<(int) Math.min(current.length, voltage.length); i++) {
+          addGlobalMetaList(PROJECTION + "X-ray power (W)", (current[i] * voltage[i]) / 1000);
+        }
+      }
+    }
+    addGlobalMeta(IMAGE_DETAILS + "File type", suffix);
+
+    if (pixelSize != null) {
+      addGlobalMeta(IMAGE_DETAILS + "Field of view (µm)",
+        (m.sizeX * pixelSize) + ", " + (m.sizeY * pixelSize));
+    }
+
     MetadataStore store = makeFilterMetadata();
     MetadataTools.populatePixels(store, this, true);
+
+    if (pixelSize != null) {
+      Length physicalSize = FormatTools.getPhysicalSize(pixelSize, "µm");
+      store.setPixelsPhysicalSizeX(physicalSize, 0);
+      store.setPixelsPhysicalSizeY(physicalSize, 0);
+    }
+
+    double firstTimestamp = 0;
+    for (int p=0; p<getImageCount(); p++) {
+      if (exposureTimes != null && p < exposureTimes.length) {
+        store.setPlaneExposureTime(new Time(exposureTimes[p], UNITS.SECOND), 0, p);
+      }
+      if (xPos != null && p < xPos.length) {
+        store.setPlanePositionX(new Length(xPos[p], UNITS.MICROMETER), 0, p);
+      }
+      if (yPos != null && p < yPos.length) {
+        store.setPlanePositionY(new Length(yPos[p], UNITS.MICROMETER), 0, p);
+      }
+      if (zPos != null && p < zPos.length) {
+        store.setPlanePositionZ(new Length(zPos[p], UNITS.MICROMETER), 0, p);
+      }
+      if (datestamps != null) {
+        if (p == 0) {
+          firstTimestamp = DateTools.getTime(datestamps[0], DATESTAMP);
+          store.setImageAcquisitionDate(new Timestamp(DateTools.formatDate(datestamps[0], DATESTAMP)), 0);
+        }
+        double delta = DateTools.getTime(datestamps[p], DATESTAMP) - firstTimestamp;
+        store.setPlaneDeltaT(new Time(delta, UNITS.MILLISECOND), 0, p);
+      }
+    }
   }
 
   // -- Helper methods --
@@ -189,6 +505,9 @@ public class ZeissXRMReader extends FormatReader {
     poi.initialize(Location.getMappedId(getCurrentFile()));
   }
 
+  /**
+   * Convert an XRM data type to a Bio-Formats pixel type.
+   */
   private int getPixelType(int dataType) throws FormatException {
     switch (dataType) {
       case 2:
@@ -209,6 +528,68 @@ public class ZeissXRMReader extends FormatReader {
         return FormatTools.DOUBLE;
     }
     throw new FormatException("Unsupported data type: " + dataType);
+  }
+
+  private String getMetadataPixelType(int dataType) throws FormatException {
+    switch (dataType) {
+      case 2:
+        return "byte";
+      case 3:
+        return "ubyte";
+      case 4:
+        return "short";
+      case 5:
+        return "ushort";
+      case 6:
+        return "int";
+      case 7:
+        return "uint";
+      case 10:
+        return "float";
+      case 11:
+        return "double";
+    }
+    throw new FormatException("Unsupported data type: " + dataType);
+  }
+
+  private String readAsString(RandomAccessInputStream stream) throws IOException {
+    long len = stream.length();
+    if (len > Integer.MAX_VALUE) {
+      throw new IOException("Length too large to read as string: " + len);
+    }
+    String value = stream.readString((int) len);
+    return value.trim();
+  }
+
+  private String getYesNo(RandomAccessInputStream stream) throws IOException {
+    int v = stream.read();
+    return v == 0 ? "No" : "Yes";
+  }
+
+  private double[] readAsDoubles(RandomAccessInputStream stream) throws IOException {
+    double[] v = new double[(int) (stream.length() / 4)];
+    for (int i=0; i<v.length; i++) {
+      v[i] = (double) stream.readFloat();
+    }
+    return v;
+  }
+
+  private void addMetadataList(double[] v, String key) {
+    boolean singleValue = true;
+    for (double d : v) {
+      if (Math.abs(d - v[0]) > Constants.EPSILON) {
+        singleValue = false;
+        break;
+      }
+    }
+    if (singleValue) {
+      addGlobalMeta(key, v[0]);
+    }
+    else {
+      for (double d : v) {
+        addGlobalMetaList(key, d);
+      }
+    }
   }
 
 }
