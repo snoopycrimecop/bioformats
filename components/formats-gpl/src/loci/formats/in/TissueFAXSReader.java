@@ -430,10 +430,9 @@ public class TissueFAXSReader extends FormatReader {
         CoreMetadata correction = new CoreMetadata(m);
         correction.sizeX = start.tileSizeX;
         correction.sizeY = start.tileSizeY;
-        correction.sizeC = m.rgb ? 4 : m.sizeC;
         correction.pixelType = FormatTools.FLOAT;
         correction.resolutionCount = 1;
-        correction.littleEndian = false;
+        correction.littleEndian = true;
 
         core.add(correction);
       }
@@ -628,6 +627,7 @@ public class TissueFAXSReader extends FormatReader {
     options.width = region.tileSizeX;
     options.height = region.tileSizeY;
     options.interleaved = isInterleaved();
+    options.littleEndian = isLittleEndian();
     return options;
   }
 
@@ -869,6 +869,24 @@ public class TissueFAXSReader extends FormatReader {
         CodecOptions options = getCodecOptions(region);
 
         data = getCodec(compression).decompress(data, options);
+        int bpp = FormatTools.getBytesPerPixel(getPixelType());
+
+        // found 4 channels, need to remove extras to match channel count
+        if (data.length == options.width * options.height * bpp * 4) {
+          int srcStride = bpp * 4;
+          int destStride = bpp * getRGBChannelCount();
+          byte[] tmp = new byte[options.width * options.height * destStride];
+
+          if (isInterleaved()) {
+            for (int pix=0; pix<options.width*options.height; pix++) {
+              System.arraycopy(data, pix * srcStride, tmp, pix * destStride, destStride);
+            }
+          }
+          else {
+            System.arraycopy(data, 0, tmp, 0, tmp.length);
+          }
+          data = tmp;
+        }
 
         Region correction = new Region(0, 0, options.width, options.height);
 
