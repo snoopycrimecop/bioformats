@@ -326,7 +326,7 @@ public class JDCEReader extends FormatReader {
         // if all of the imaging modes are "Max Intensity Projection",
         // the Z size will be reset to 1 since only one Z slice is present
         imagingMode[c] = wavelength.getString("ImagingMode");
-        if (imagingMode[c] == null || (c >= 1 && (!imagingMode[c].equals("Max Intensity Projection") || !imagingMode[c].equals(imagingMode[0])))) {
+        if (imagingMode[c] == null || !imagingMode[c].equals("Max Intensity Projection") || !imagingMode[c].equals(imagingMode[0])) {
           singleZ = false;
         }
       }
