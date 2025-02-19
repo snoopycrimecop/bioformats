@@ -472,6 +472,9 @@ public class ZeissXRMReader extends FormatReader {
     if (name.equals(REFERENCE_PATH + "ImageInfo/XrayMagnification")) {
       addGlobalMeta(PROJECTION + "Geometric Magnification", stream.readFloat());
     }
+    else if (name.equals("Root Entry/Selection/SelectedImages")) {
+      addGlobalMeta(PROJECTION + "Selected", getYesNo(stream));
+    }
     else if (name.equals(IMAGE_INFO_PATH + "XrayCurrent")) {
       current = readAsDoubles(stream);
       addMetadataList(current, PROJECTION + "X-ray current (µA)");
@@ -485,6 +488,12 @@ public class ZeissXRMReader extends FormatReader {
     else if (name.equals(IMAGE_INFO_PATH + "ZPosition")) {
       zPos = readAsDoubles(stream);
     }
+    else if (name.equals(IMAGE_INFO_PATH + "DtoRADistance")) {
+      addGlobalMeta(PROJECTION + "Detector-RA (mm)", stream.readFloat());
+    }
+    else if (name.equals(IMAGE_INFO_PATH + "StoRADistance")) {
+      addGlobalMeta(PROJECTION + "Source-RA (mm)", stream.readFloat());
+    }
     else if (name.equals(IMAGE_INFO_PATH + "FanAngle")) {
       double[] fanAngle = readAsDoubles(stream);
       addMetadataList(fanAngle, PROJECTION + "Fan angle");
@@ -492,6 +501,10 @@ public class ZeissXRMReader extends FormatReader {
     else if (name.equals(IMAGE_INFO_PATH + "ConeAngle")) {
       double[] coneAngle = readAsDoubles(stream);
       addMetadataList(coneAngle, PROJECTION + "Cone angle");
+    }
+    else if (name.equals(IMAGE_INFO_PATH + "Angles")) {
+      double[] angles = readAsDoubles(stream);
+      addMetadataList(angles, PROJECTION + "Angle");
     }
     else if (name.equals(IMAGE_INFO_PATH + "ReadOutTime")) {
       addGlobalMeta(PROJECTION + "Camera Readout Speed", stream.readInt());
