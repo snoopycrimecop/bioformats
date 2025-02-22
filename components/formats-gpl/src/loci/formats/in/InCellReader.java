@@ -112,6 +112,8 @@ public class InCellReader extends FormatReader {
   private List<String> exFilters = new ArrayList<String>();
   private List<String> emFilters = new ArrayList<String>();
 
+  private transient boolean variableZ = false;
+
   // -- Constructor --
 
   /** Constructs a new InCell 1000/2000 reader. */
@@ -280,6 +282,7 @@ public class InCellReader extends FormatReader {
       refractive = null;
       emFilters.clear();
       exFilters.clear();
+      variableZ = false;
     }
   }
 
@@ -464,8 +467,18 @@ public class InCellReader extends FormatReader {
       }
       int expectedSeries = totalImages / (getSizeZ() * getSizeC() * getSizeT());
       if (expectedSeries > 0) {
-        LOGGER.warn("Using series count {} but plane count indicates {}",
-          seriesCount, expectedSeries);
+        if (variableZ) {
+          // we know that different channels may have different Z sizes,
+          // so don't try to recalculate the series count based on
+          // SizeZ * SizeC
+          LOGGER.warn("Using series count {} but plane count indicates {}",
+            seriesCount, expectedSeries);
+        }
+        else {
+          // we expect all channels to have the same Z size,
+          // so recalculate the series count based on the expected number of planes
+          seriesCount = (int) Math.min(seriesCount, expectedSeries);
+        }
       }
     }
     else seriesCount = totalImages / (getSizeZ() * getSizeC() * getSizeT());
@@ -792,7 +805,7 @@ public class InCellReader extends FormatReader {
     private int wellRow, wellCol;
     private int nChannels = 0;
     private boolean doT = true;
-    private Boolean doZ = null;
+    private boolean doZ = true;
     private Image lastImage = null;
 
     @Override
@@ -913,8 +926,15 @@ public class InCellReader extends FormatReader {
         // different wavelengths (channels) may have different imaging modes
         // we want to allow a Z stack if one or more "3-D" imaging modes
         // are encountered, even if some are variations on "2-D"
-        if (mode != null && (doZ == null || !doZ)) {
-          doZ = mode.equals("3-D");
+        if (mode != null) {
+          boolean is3D = mode.equals("3-D");
+          // record if there were different imaging modes found
+          if (!variableZ && is3D != doZ && ms0.sizeC > 1) {
+            variableZ = true;
+          }
+          if (ms0.sizeC == 1 || !doZ) {
+            doZ = is3D;
+          }
         }
       }
       else if (qName.equals("AcqWave")) {
