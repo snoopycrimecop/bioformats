@@ -67,6 +67,9 @@ public class InCellReader extends FormatReader {
 
   // -- Constants --
 
+  public static final String DUPLICATE_PLANES_KEY = "incell.duplicate_missing_planes";
+  public static final boolean DUPLICATE_PLANES_DEFAULT = true;
+
   public static final String INCELL_MAGIC_STRING = "IN Cell Analyzer";
   public static final String CYTELL_MAGIC_STRING = "Cytell";
 
@@ -125,6 +128,17 @@ public class InCellReader extends FormatReader {
     hasCompanionFiles = true;
     datasetDescription = "One .xdce file with at least one .tif/.tiff or " +
       ".im file";
+  }
+
+  // -- InCellReader API methods --
+
+  public boolean duplicatePlanes() {
+    MetadataOptions options = getMetadataOptions();
+    if (options instanceof DynamicMetadataOptions) {
+      return ((DynamicMetadataOptions) options).getBoolean(
+       DUPLICATE_PLANES_KEY, DUPLICATE_PLANES_DEFAULT);
+    }
+    return DUPLICATE_PLANES_DEFAULT;
   }
 
   // -- IFormatReader API methods --
@@ -191,9 +205,18 @@ public class InCellReader extends FormatReader {
       getSeries() % channelsPerTimepoint.size() : coordinates[2];
     int image = getIndex(coordinates[0], coordinates[1], 0);
 
-    if (imageFiles[well][field][timepoint][image] == null) return buf;
+    if (imageFiles[well][field][timepoint][image] == null) {
+      // unless otherwise configured, copy the first Z section
+      // to any other planes in the Z stack that are missing
+      if (duplicatePlanes() && coordinates[0] > 0) {
+        return openBytes(getIndex(0, coordinates[1], coordinates[2]), buf, x, y, w, h);
+      }
+      return buf;
+    }
     String filename = imageFiles[well][field][timepoint][image].filename;
-    if (filename == null || !(new Location(filename).exists())) return buf;
+    if (filename == null || !(new Location(filename).exists())) {
+      return buf;
+    }
 
     if (imageFiles[well][field][timepoint][image].isTiff) {
       try {
@@ -329,6 +352,14 @@ public class InCellReader extends FormatReader {
   }
 
   // -- Internal FormatReader API methods --
+
+  /* @see loci.formats.FormatReader#getAvailableOptions() */
+  @Override
+  protected ArrayList<String> getAvailableOptions() {
+    ArrayList<String> optionsList = super.getAvailableOptions();
+    optionsList.add(DUPLICATE_PLANES_KEY);
+    return optionsList;
+  }
 
   /* @see loci.formats.FormatReader#initFile(String) */
   @Override
