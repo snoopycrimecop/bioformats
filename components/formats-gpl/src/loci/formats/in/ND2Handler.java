@@ -791,6 +791,7 @@ public class ND2Handler extends BaseHandler {
               int tSize = ms0.sizeT;
               int c = ms0.sizeC;
               String order = ms0.dimensionOrder;
+              int pixelType = ms0.pixelType;
               core = new CoreMetadataList();
               for (int i=0; i<numSeries; i++) {
                 CoreMetadata ms = new CoreMetadata();
@@ -801,6 +802,7 @@ public class ND2Handler extends BaseHandler {
                 ms.sizeC = c == 0 ? 1 : c;
                 ms.sizeT = tSize == 0 ? 1 : tSize;
                 ms.dimensionOrder = order;
+                ms.pixelType = pixelType;
               }
               ms0 = core.get(0, 0);
             }
