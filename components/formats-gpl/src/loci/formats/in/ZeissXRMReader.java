@@ -298,6 +298,11 @@ public class ZeissXRMReader extends FormatReader {
     m.dimensionOrder = "XYZTC";
     m.littleEndian = true;
 
+    m.moduloZ.type = FormatTools.ROTATION;
+    m.moduloZ.step = 1;
+    m.moduloZ.start = 0;
+    m.moduloZ.end = m.sizeZ - 1;
+
     addGlobalMeta(DATASET + "Data file name", new Location(getCurrentFile()).getAbsolutePath());
     if (isTXM) {
       addGlobalMeta(RECON_SETTINGS + "Output file-format", suffix);
