@@ -867,7 +867,7 @@ public class InCellReader extends FormatReader {
           }
         }
       }
-      else if (qName.equals("TimePoint")) {
+      else if (qName.equals("TimePoint") && doT) {
         channelsPerTimepoint.add(nChannels);
         nChannels = 0;
       }
