@@ -4241,7 +4241,7 @@ public class ZeissCZIReader extends FormatReader {
         }
       }
 
-      throw new FormatException("DimensionEntry for 'X' not found");
+      throw new FormatException("DimensionEntry for 'Y' not found");
     }
 
     // -- Helper methods --
