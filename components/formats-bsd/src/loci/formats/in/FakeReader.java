@@ -153,8 +153,8 @@ public class FakeReader extends FormatReader {
   private Length physicalSizeX, physicalSizeY, physicalSizeZ;
 
   /* channel wavelengths */
-  ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
-  ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
+  private transient ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
+  private transient ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
 
   /* annotation counts per file */
   private int annBool = 0;
