@@ -390,9 +390,13 @@ public class FlowSightReader extends FormatReader {
           byte nibble;
           try {
             nibble = getNextNibble();
-            value += ((short) (nibble & 0x7) ) << shift;
-            // this addition is safe since shift should be 15 or less at this point
+
+            // these 2 additions are safe since shift is 15 or less at this point
+            // due to check at top of loop
+            short lowBits = (short) (nibble & 0x7);
+            value += (short) (lowBits << shift);
             shift += (short) 3;
+
             if ((nibble & 0x8) == 0) {
               loaded = true;
               bHasNext = true;
