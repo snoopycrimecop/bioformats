@@ -382,11 +382,17 @@ public class FlowSightReader extends FormatReader {
         shift = 0;
         value = 0;
         while (! loaded) {
+          if (shift > 15) {
+            // this implies that all subsequently read bits will be cleared
+            LOGGER.error("Unexpected bit shift value {}, image may be truncated", shift);
+            return false;
+          }
           byte nibble;
           try {
             nibble = getNextNibble();
             value += ((short) (nibble & 0x7) ) << shift;
-            shift += 3;
+            // this addition is safe since shift should be 15 or less at this point
+            shift += (short) 3;
             if ((nibble & 0x8) == 0) {
               loaded = true;
               bHasNext = true;
