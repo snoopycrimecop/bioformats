@@ -686,6 +686,7 @@ public class Exporter {
             if (outputFiles.length > 1) {
                 for (int i = 0; i < outputFiles.length; i++) {
                     if (new File(outputFiles[i]).exists()) {
+                        IJ.error(outputFiles[i] + " already exists");
                         in = true;
                         break;
                     }
