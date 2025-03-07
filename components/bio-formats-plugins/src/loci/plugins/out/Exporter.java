@@ -705,6 +705,10 @@ public class Exporter {
                     new File(outputFiles[i]).delete();
                 }
             }
+            else if (in) {
+              IJ.error("Some files already exist; delete them and try again.");
+              return;
+            }
             //We are now ready to write the image
             if (f != null) f.delete(); //delete the file.
             if (compression != null) {
