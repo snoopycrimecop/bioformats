@@ -302,6 +302,9 @@ public class Exporter {
             outfile = new File(dir, name).getAbsolutePath();
             if (outfile == null) return;
         }
+        else {
+          f = new File(outfile);
+        }
 
         if (windowless) {
             if (splitZ == null) splitZ = Boolean.FALSE;
