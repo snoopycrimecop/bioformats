@@ -1062,7 +1062,12 @@ public class TiffParser implements Closeable {
       return buf;
     }
 
-    long nrows = numTileRows;
+    // very unlikely, but checking here so that the tile row count
+    // can be cast to int without worrying about overflowing
+    if (numTileRows > Integer.MAX_VALUE) {
+      throw new FormatException(numTileRows + " rows of tiles not supported");
+    }
+    int nrows = (int) numTileRows;
     if (planarConfig == 2) numTileRows *= samplesPerPixel;
 
     Region imageBounds = new Region(x, y, (int) width, (int) height);
@@ -1145,7 +1150,9 @@ public class TiffParser implements Closeable {
           int src = (int) (q * tileSize) + realX + realY;
           int dest = (int) (q * planeSize) + pixel * (tileX - x) +
             outputRowLen * (tileY - y);
-          if (planarConfig == 2) dest += (planeSize * (row / nrows));
+          if (planarConfig == 2) {
+            dest += (planeSize * (row / nrows));
+          }
 
           // copying the tile directly will only work if there is no overlap
           // and only one tile needs to be read
