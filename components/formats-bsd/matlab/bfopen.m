@@ -155,10 +155,11 @@ for s = 1:numSeries
         arr = bfGetPlane(r, i, varargin{:});
 
         % retrieve color map data
+        % transpose tables for compatibility with things like imshow
         if bpp == 1
-            colorMaps{i} = r.get8BitLookupTable();
+            colorMaps{i} = r.get8BitLookupTable()';
         else
-            colorMaps{i} = r.get16BitLookupTable();
+            colorMaps{i} = r.get16BitLookupTable()';
         end
 
         warning_state = warning ('off');
