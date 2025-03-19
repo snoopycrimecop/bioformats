@@ -177,21 +177,22 @@ public class ZeissXRMReader extends FormatReader {
     allFiles.sort(null);
     if (allFiles.isEmpty()) {
       throw new FormatException(
-        "No files were found - the .cxd may be corrupt.");
+        "No files were found - the file may be corrupt.");
     }
 
-    for (String name : allFiles) {
+    for (String originalFile : allFiles) {
+      String name = originalFile.replaceAll("\\\\", "/");
       if (name.startsWith("Root Entry/ImageData")) {
         int index = Integer.parseInt(name.substring(name.lastIndexOf("Image") + 5)) - 1;
         while (index >= imagePaths.size()) {
           imagePaths.add(null);
         }
-        imagePaths.set(index, name);
+        imagePaths.set(index, originalFile);
 
         // this is just a raw image with no metadata, so don't try to open it here
         continue;
       }
-      try (RandomAccessInputStream stream = poi.getDocumentStream(name)) {
+      try (RandomAccessInputStream stream = poi.getDocumentStream(originalFile)) {
         stream.order(true);
 
         // type-specific metadata may be present in both types of files,
