@@ -470,8 +470,8 @@ public class ScanrReader extends FormatReader {
         char row1 = s1.charAt(0);
         char row2 = s2.charAt(0);
 
-        final Integer col1 = new Integer(s1.substring(1));
-        final Integer col2 = new Integer(s2.substring(1));
+        final Integer col1 = Integer.parseInt(s1.substring(1));
+        final Integer col2 = Integer.parseInt(s2.substring(1));
 
         if (row1 < row2) {
           return -1;
@@ -611,8 +611,13 @@ public class ScanrReader extends FormatReader {
       ms.bitsPerPixel = 12;
     }
 
+    // only populate Plane.The* if at least one kind of additional
+    // plane metadata is available
+    boolean populatePlanes = deltaT != null || exposures.size() >= getSizeC() ||
+      fieldPositionX != null || fieldPositionY != null;
+
     MetadataStore store = makeFilterMetadata();
-    MetadataTools.populatePixels(store, this);
+    MetadataTools.populatePixels(store, this, populatePlanes);
 
     store.setPlateID(MetadataTools.createLSID("Plate", 0), 0);
     store.setPlateColumns(new PositiveInteger(wellColumns), 0);
@@ -688,32 +693,35 @@ public class ScanrReader extends FormatReader {
           store.setPixelsPhysicalSizeY(y, i);
         }
 
+
+        int field = i % nFields;
+        int well = i / nFields;
         if (fieldPositionX != null && fieldPositionY != null) {
-          int field = i % nFields;
-          int well = i / nFields;
           final Length posX = fieldPositionX[field];
           final Length posY = fieldPositionY[field];
-          
+
           store.setWellSamplePositionX(posX, 0, well, field);
           store.setWellSamplePositionY(posY, 0, well, field);
-          for (int c=0; c<getSizeC(); c++) {
-            int image = getIndex(0, c, 0);
-            store.setPlaneTheZ(new NonNegativeInteger(0), i, image);
-            store.setPlaneTheC(new NonNegativeInteger(c), i, image);
-            store.setPlaneTheT(new NonNegativeInteger(0), i, image);
-            store.setPlanePositionX(fieldPositionX[field], i, image);
-            store.setPlanePositionY(fieldPositionY[field], i, image);
+        }
 
-            // exposure time is stored in milliseconds
-            // convert to seconds before populating MetadataStore
-            Double time = exposures.get(c);
-            if (time != null) {
-              time /= 1000;
-              store.setPlaneExposureTime(new Time(time, UNITS.SECOND), i, image);
-            }
-            if (deltaT != null) {
-              store.setPlaneDeltaT(new Time(deltaT, UNITS.SECOND), i, image);
-            }
+        for (int image=0; image<getImageCount(); image++) {
+          if (fieldPositionX != null) {
+            store.setPlanePositionX(fieldPositionX[field], i, image);
+          }
+          if (fieldPositionY != null) {
+            store.setPlanePositionY(fieldPositionY[field], i, image);
+          }
+
+          // exposure time is stored in milliseconds
+          // convert to seconds before populating MetadataStore
+          int[] coords = getZCTCoords(image);
+          Double time = exposures.get(coords[1]);
+          if (time != null) {
+            time /= 1000;
+            store.setPlaneExposureTime(new Time(time, UNITS.SECOND), i, image);
+          }
+          if (deltaT != null) {
+            store.setPlaneDeltaT(new Time(deltaT, UNITS.SECOND), i, image);
           }
         }
       }
@@ -830,7 +838,7 @@ public class ScanrReader extends FormatReader {
             plateName = v;
           }
           else if (key.equals("exposure time")) {
-            exposures.add(new Double(v));
+            exposures.add(DataTools.parseDouble(v));
           }
           else if (key.equals("idle") && validChannel) {
             int lastIndex = channelNames.size() - 1;
@@ -847,15 +855,15 @@ public class ScanrReader extends FormatReader {
           else if (key.equals("well selection table + cDNA")) {
             if (Character.isDigit(v.charAt(0))) {
               wellIndex = v;
-              wellNumbers.put(wellCount, new Integer(v));
+              wellNumbers.put(wellCount, Integer.parseInt(v));
               wellCount++;
             }
             else {
-              wellLabels.put(v, new Integer(wellIndex));
+              wellLabels.put(v, Integer.parseInt(wellIndex));
             }
           }
           else if (key.equals("conversion factor um/pixel")) {
-            pixelSize = new Double(v);
+            pixelSize = DataTools.parseDouble(v);
           }
           else if (foundPositions) {
             if (nextXPos == nextYPos) {

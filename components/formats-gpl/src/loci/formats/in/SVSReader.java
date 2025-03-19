@@ -41,6 +41,8 @@ import loci.formats.CoreMetadata;
 import loci.formats.FormatException;
 import loci.formats.FormatTools;
 import loci.formats.MetadataTools;
+import loci.formats.codec.Codec;
+import loci.formats.codec.CodecOptions;
 import loci.formats.meta.MetadataStore;
 import loci.formats.tiff.IFD;
 import loci.formats.tiff.PhotoInterp;
@@ -69,6 +71,9 @@ public class SVSReader extends BaseTiffReader {
 
   // -- Constants --
 
+  public static final String REMOVE_THUMBNAIL_KEY = "svs.remove_thumbnail";
+  public static final boolean REMOVE_THUMBNAIL_DEFAULT = true;
+
   /** Logger for this class. */
   private static final Logger LOGGER =
     LoggerFactory.getLogger(SVSReader.class);
@@ -90,9 +95,18 @@ public class SVSReader extends BaseTiffReader {
   private ArrayList<String> dyeNames = new ArrayList<String>();
 
   private transient Color displayColor = null;
+
+  // explicitly record the series and IFD indexes
+  // for the label and macro images
+  // this makes it easier to calculate IFD mappings
   private int labelIndex = -1;
   private int macroIndex = -1;
+
+  // total number of extra (label and macro) images
   private int extraImages = 0;
+
+  private transient Double physicalDistanceFromLeftEdge;
+  private transient Double physicalDistanceFromTopEdge;
 
   // -- Constructor --
 
@@ -107,8 +121,19 @@ public class SVSReader extends BaseTiffReader {
 
   public SVSReader(String name, String[] suffixes) {
     super(name, suffixes);
-  }  
-  
+  }
+
+  // -- SVSReader API methods --
+
+  public boolean removeThumbnail() {
+    MetadataOptions options = getMetadataOptions();
+    if (options instanceof DynamicMetadataOptions) {
+      return ((DynamicMetadataOptions) options).getBoolean(
+        REMOVE_THUMBNAIL_KEY, REMOVE_THUMBNAIL_DEFAULT);
+    }
+    return REMOVE_THUMBNAIL_DEFAULT;
+  }
+
   // -- IFormatReader API methods --
 
   /* @see loci.formats.IFormatReader#fileGroupOption(String) */
@@ -149,7 +174,9 @@ public class SVSReader extends BaseTiffReader {
           }
           if (imageDescription != null
               && imageDescription.startsWith(APERIO_IMAGE_DESCRIPTION_PREFIX)) {
-            return true;
+            // reject anything with just one IFD, as that indicates there is
+            // no pyramid, thumbnail, label, or macro
+            return tiffParser.getIFDOffsets().length > 1;
           }
         }
         return false;
@@ -170,11 +197,8 @@ public class SVSReader extends BaseTiffReader {
     throws FormatException, IOException
   {
     FormatTools.checkPlaneParameters(this, no, buf.length, x, y, w, h);
-    if (tiffParser == null) {
-      initTiffParser();
-    }
-    int ifd = ((SVSCoreMetadata) getCurrentCore()).ifdIndex[no];
-    tiffParser.getSamples(ifds.get(ifd), buf, x, y, w, h);
+    IFD ifd = getIFD(no);
+    tiffParser.getSamples(ifd, buf, x, y, w, h);
     return buf;
   }
 
@@ -229,8 +253,8 @@ public class SVSReader extends BaseTiffReader {
   public int getOptimalTileWidth() {
     FormatTools.assertId(currentId, true, 1);
     try {
-      int ifd = ((SVSCoreMetadata) getCurrentCore()).ifdIndex[0];
-      return (int) ifds.get(ifd).getTileWidth();
+      IFD ifd = getIFD(0);
+      return (int) ifd.getTileWidth();
     }
     catch (FormatException e) {
       LOGGER.debug("", e);
@@ -243,13 +267,83 @@ public class SVSReader extends BaseTiffReader {
   public int getOptimalTileHeight() {
     FormatTools.assertId(currentId, true, 1);
     try {
-      int ifd = ((SVSCoreMetadata) getCurrentCore()).ifdIndex[0];
-      return (int) ifds.get(ifd).getTileLength();
+      IFD ifd = getIFD(0);
+      return (int) ifd.getTileLength();
     }
     catch (FormatException e) {
       LOGGER.debug("", e);
     }
     return super.getOptimalTileHeight();
+  }
+
+  // -- ICompressedTileReader API methods --
+
+  @Override
+  public int getTileRows(int no) {
+    FormatTools.assertId(currentId, true, 1);
+    try {
+      IFD ifd = getIFD(no);
+      return (int) ifd.getTilesPerColumn();
+    }
+    catch (FormatException e) {
+      LOGGER.debug("Could not get tile row count", e);
+    }
+    return super.getTileRows(no);
+  }
+
+  @Override
+  public int getTileColumns(int no) {
+    FormatTools.assertId(currentId, true, 1);
+    try {
+      IFD ifd = getIFD(no);
+      return (int) ifd.getTilesPerRow();
+    }
+    catch (FormatException e) {
+      LOGGER.debug("Could not get tile column count", e);
+    }
+    return super.getTileColumns(no);
+  }
+
+  @Override
+  public byte[] openCompressedBytes(int no, int x, int y) throws FormatException, IOException {
+    FormatTools.assertId(currentId, true, 1);
+    IFD ifd = getIFD(no);
+    byte[] buf = new byte[(int) getCompressedByteCount(ifd, x, y)];
+    return openCompressedBytes(no, buf, x, y);
+  }
+
+  @Override
+  public byte[] openCompressedBytes(int no, byte[] buf, int x, int y) throws FormatException, IOException {
+    FormatTools.assertId(currentId, true, 1);
+    IFD ifd = getIFD(no);
+    return copyTile(ifd, buf, x, y);
+  }
+
+  @Override
+  public Codec getTileCodec(int no) throws FormatException, IOException {
+    FormatTools.assertId(currentId, true, 1);
+    IFD ifd = getIFD(no);
+    return ifd.getCompression().getCodec();
+  }
+
+  @Override
+  public CodecOptions getTileCodecOptions(int no, int x, int y) throws FormatException, IOException {
+    FormatTools.assertId(currentId, true, 1);
+    IFD ifd = getIFD(no);
+    CodecOptions options = ifd.getCompression().getCompressionCodecOptions(ifd);
+    options.width = (int) ifd.getTileWidth();
+    options.height = (int) ifd.getTileLength();
+    return options;
+  }
+
+  // -- Internal FormatReader API methods --
+
+  /* @see loci.formats.FormatReader#getAvailableOptions() */
+  @Override
+  protected ArrayList<String> getAvailableOptions() {
+    ArrayList<String> optionsList = super.getAvailableOptions();
+    optionsList.add(REMOVE_THUMBNAIL_KEY);
+    return optionsList;
   }
 
   // -- Internal BaseTiffReader API methods --
@@ -275,10 +369,16 @@ public class SVSReader extends BaseTiffReader {
 
     for (int i=0; i<seriesCount; i++) {
       setSeries(i);
-      int index = getIFDIndex(i, 0);
-      tiffParser.fillInIFD(ifds.get(index));
+      int index = i;
 
-      String comment = ifds.get(index).getComment();
+      IFD currentIFD = ifds.get(index);
+      tiffParser.fillInIFD(currentIFD);
+
+      String comment = currentIFD.getComment();
+      int subfileType = currentIFD.getIFDIntValue(IFD.NEW_SUBFILE_TYPE);
+
+      // if there is no identifying comment, assign this IFD
+      // to the label or macro (if a label or macro was not already found)
       if (comment == null) {
         if (labelIndex == -1) {
           labelIndex = i;
@@ -288,10 +388,15 @@ public class SVSReader extends BaseTiffReader {
         }
         continue;
       }
+
+      // when the comment exists, check it for any information that
+      // identifies the image type
       comments[i] = comment;
       String[] lines = comment.split("\n");
       String[] tokens;
       String key, value;
+      boolean foundLabel = false;
+      boolean foundMacro = false;
       for (String line : lines) {
         tokens = line.split("[|]");
         for (String t : tokens) {
@@ -299,7 +404,7 @@ public class SVSReader extends BaseTiffReader {
             key = t.substring(0, t.indexOf('=')).trim();
             value = t.substring(t.indexOf('=') + 1).trim();
             if (key.equals("TotalDepth")) {
-              zPosition[index] = new Double(0);
+              zPosition[index] = 0d;
             }
             else if (key.equals("OffsetZ")) {
               zPosition[index] = DataTools.parseDouble(value);
@@ -307,14 +412,27 @@ public class SVSReader extends BaseTiffReader {
           }
           else if (t.toLowerCase().indexOf("label") >= 0) {
             labelIndex = i;
+            foundLabel = true;
           }
           else if (t.toLowerCase().indexOf("macro") >= 0) {
             macroIndex = i;
+            foundMacro = true;
           }
         }
       }
       if (zPosition[index] != null) {
         uniqueZ.add(zPosition[index]);
+      }
+
+      // if the comment existed but didn't identify a label or macro
+      // check the subfile type to see if we suspect a label or macro anyway
+      if (!foundLabel && !foundMacro && subfileType != 0) {
+        if (labelIndex == -1) {
+          labelIndex = i;
+        }
+        else if (macroIndex == -1) {
+          macroIndex = i;
+        }
       }
     }
     setSeries(0);
@@ -349,6 +467,12 @@ public class SVSReader extends BaseTiffReader {
       }
       else {
         ifds.remove(s);
+        if (s < labelIndex) {
+          labelIndex--;
+        }
+        if (s < macroIndex) {
+          macroIndex--;
+        }
       }
     }
     if (uniqueZ.size() == 0) {
@@ -469,6 +593,12 @@ public class SVSReader extends BaseTiffReader {
                   int color = Integer.parseInt(value);
                   displayColor = new Color((color << 8) | 0xff);
                   break;
+                case "Left":
+                  physicalDistanceFromLeftEdge = DataTools.parseDouble(value);
+                  break;
+                case "Top":
+                  physicalDistanceFromTopEdge = DataTools.parseDouble(value);
+                  break;
               }
             }
           }
@@ -478,6 +608,26 @@ public class SVSReader extends BaseTiffReader {
     setSeries(0);
 
     core.reorder();
+
+    if (removeThumbnail()) {
+      // if the smallest resolution uses strips instead of tiles
+      // then it's a "thumbnail" image instead of a real resolution
+      // remove it by default, see https://github.com/ome/bioformats/issues/3757
+      IFD lastResolution = ifds.get(getIFDIndex(core.size(0) - 1, 0));
+      if (lastResolution.get(IFD.STRIP_BYTE_COUNTS) != null) {
+        int index = core.flattenedIndex(0, core.size(0) - 1);
+        core.remove(0, core.size(0) - 1);
+
+        // update the label and macro indexes
+        // otherwise image names won't be set correctly
+        if (index < labelIndex) {
+          labelIndex--;
+        }
+        if (index < macroIndex) {
+          macroIndex--;
+        }
+      }
+    }
   }
 
   /* @see loci.formats.BaseTiffReader#initMetadataStore() */
@@ -486,7 +636,10 @@ public class SVSReader extends BaseTiffReader {
     super.initMetadataStore();
 
     MetadataStore store = makeFilterMetadata();
-    MetadataTools.populatePixels(store, this, getImageCount() > 1);
+    boolean populatePlaneData = getImageCount() > 1 ||
+      physicalDistanceFromTopEdge != null ||
+      physicalDistanceFromLeftEdge != null;
+    MetadataTools.populatePixels(store, this, populatePlaneData);
 
     String instrument = MetadataTools.createLSID("Instrument", 0);
     String objective = MetadataTools.createLSID("Objective", 0, 0);
@@ -501,6 +654,21 @@ public class SVSReader extends BaseTiffReader {
       store.setImageInstrumentRef(instrument, i);
       store.setObjectiveSettingsID(objective, i);
 
+      if (i == 0) {
+        if (physicalDistanceFromTopEdge != null) {
+          Length yPos = FormatTools.getStagePosition(physicalDistanceFromTopEdge, UNITS.MILLIMETER);
+          for (int p=0; p<getImageCount(); p++) {
+            store.setPlanePositionY(yPos, i, p);
+          }
+        }
+        if (physicalDistanceFromLeftEdge != null) {
+          Length xPos = FormatTools.getStagePosition(physicalDistanceFromLeftEdge, UNITS.MILLIMETER);
+          for (int p=0; p<getImageCount(); p++) {
+            store.setPlanePositionX(xPos, i, p);
+          }
+        }
+      }
+
       if (hasFlattenedResolutions() || i > extraImages) {
         store.setImageName("Series " + (i + 1), i);
       }
@@ -508,10 +676,10 @@ public class SVSReader extends BaseTiffReader {
         if (i == 0) {
           store.setImageName("", i);
         }
-        else if (i == labelIndex) {
+        else if (core.flattenedIndex(i, 0) == labelIndex) {
           store.setImageName("label image", i);
         }
-        else if (i == macroIndex) {
+        else if (core.flattenedIndex(i, 0) == macroIndex) {
           store.setImageName("macro image", i);
         }
       }
@@ -559,7 +727,10 @@ public class SVSReader extends BaseTiffReader {
 
   private int getIFDIndex(int coreIndex, int no) {
     int index = coreIndex;
+    // coreCount is the number of pyramid resolutions (independent of flattening)
     int coreCount = core.flattenedSize() - extraImages;
+
+    // this is the case where the requested IFD is within the pyramid
     if (coreIndex > 0 && coreIndex < coreCount) {
       if (core.get(0, 0).imageCount > 1) {
         index++;
@@ -568,6 +739,7 @@ public class SVSReader extends BaseTiffReader {
         index = coreCount - coreIndex;
       }
     }
+
     if ((coreIndex > 0 && coreIndex < coreCount) || no > 0) {
       for (int i=0; i<no; i++) {
         index += coreCount;
@@ -576,11 +748,21 @@ public class SVSReader extends BaseTiffReader {
         index++;
       }
     }
-    else if (coreIndex >= coreCount && core.get(0, 0).imageCount > 1) {
-      for (int i=0; i<coreCount; i++) {
-        index += core.get(0, i).imageCount;
+    else if (coreIndex >= coreCount) {
+      if (core.get(0, 0).imageCount > 1) {
+        for (int i=0; i<coreCount; i++) {
+          index += core.get(0, i).imageCount;
+        }
+        index -= (coreCount - 1);
       }
-      index -= (coreCount - 1);
+      else {
+        if (coreIndex == labelIndex) {
+          return labelIndex;
+        }
+        if (coreIndex == macroIndex) {
+          return macroIndex;
+        }
+      }
     }
     return index;
   }
@@ -632,7 +814,7 @@ public class SVSReader extends BaseTiffReader {
   }
 
   protected double getMagnification() {
-    return magnification;
+    return magnification == null ? Double.NaN : magnification;
   }
 
   protected ArrayList<String> getDyeNames() {
@@ -641,6 +823,21 @@ public class SVSReader extends BaseTiffReader {
 
   protected Color getDisplayColor() {
     return displayColor;
+  }
+
+  /**
+   * Get the IFD corresponding to the given plane in the current series.
+   * Initializes the underlying TiffParser if necessary.
+   *
+   * @param plane index
+   * @return corresponding IFD
+   */
+  protected IFD getIFD(int no) {
+    if (tiffParser == null) {
+      initTiffParser();
+    }
+    int ifd = ((SVSCoreMetadata) getCurrentCore()).ifdIndex[no];
+    return ifds.get(ifd);
   }
 
 }

@@ -350,15 +350,22 @@ public class TiffSaver implements Closeable {
             stripOut[strip].write(buf, strip * stripSize, stripSize);
           }
         } else {
-          for (int strip = 0; strip < nStrips - 1; strip++) {
-            stripOut[strip].write(buf, strip * stripSize, stripSize);
-          }
-          // Sigh.  Need to pad the last strip.
-          int pos = (nStrips - 1) * stripSize;
-          int len = buf.length - pos;
-          stripOut[nStrips - 1].write(buf, pos, len);
-          for (int n = len; n < stripSize; n++) {
-            stripOut[nStrips - 1].writeByte(0);
+          int effectiveStrips = !interleaved ? nStrips / nChannels : nStrips;
+          int planarChannels = !interleaved ? nChannels : 1;
+          int totalBytesPerChannel = buf.length / planarChannels;
+          for (int p=0; p<planarChannels; p++) {
+            for (int strip = 0; strip < effectiveStrips - 1; strip++) {
+              stripOut[p * effectiveStrips + strip].write(buf, strip * stripSize, stripSize);
+            }
+            // Sigh.  Need to pad the last strip.
+            int pos = p * totalBytesPerChannel + (effectiveStrips - 1) * stripSize;
+            int len = (p + 1)*totalBytesPerChannel - pos;
+            int lastStripIndex = p * effectiveStrips + (effectiveStrips - 1);
+            stripOut[lastStripIndex].write(buf, pos, len);
+
+            byte[] extra = new byte[stripSize - len];
+            Arrays.fill(extra, (byte) 0);
+            stripOut[lastStripIndex].write(extra);
           }
         }
       } else {
@@ -450,7 +457,7 @@ public class TiffSaver implements Closeable {
    * @throws FormatException
    * @throws IOException
    */
-  private void writeImageIFD(IFD ifd, int no, byte[][] strips,
+  public void writeImageIFD(IFD ifd, int no, byte[][] strips,
       int nChannels, boolean last, int x, int y)
   throws FormatException, IOException {
     LOGGER.debug("Attempting to write image IFD.");
@@ -1003,7 +1010,7 @@ public class TiffSaver implements Closeable {
    * @param pixelType The pixel type.
    * @param nChannels The number of channels.
    */
-  private void makeValidIFD(IFD ifd, int pixelType, int nChannels) {
+  public void makeValidIFD(IFD ifd, int pixelType, int nChannels) {
     int bytesPerPixel = FormatTools.getBytesPerPixel(pixelType);
     int bps = 8 * bytesPerPixel;
     int[] bpsArray = new int[nChannels];
@@ -1021,13 +1028,18 @@ public class TiffSaver implements Closeable {
     if (nChannels == 1 && ifd.getIFDValue(IFD.COLOR_MAP) != null) {
       pi = PhotoInterp.RGB_PALETTE;
     }
-    else if (nChannels == 3) {
+    else if (nChannels == 3 || nChannels == 4) {
+      // TODO: handle CMYK; nChannels == 4, EXTRA_SAMPLES must not be present
       if (ifd.getIFDValue(IFD.COMPRESSION).equals(TiffCompression.JPEG.getCode())) {
         // see https://github.com/ome/bioformats/issues/3856
         pi = PhotoInterp.Y_CB_CR;
       }
       else {
         pi = PhotoInterp.RGB;
+      }
+      if (nChannels == 4) {
+        int[] extraSamplesArray = {0};
+        ifd.putIFDValue(IFD.EXTRA_SAMPLES, extraSamplesArray);
       }
     }
     ifd.putIFDValue(IFD.PHOTOMETRIC_INTERPRETATION, pi.getCode());
@@ -1164,15 +1176,13 @@ public class TiffSaver implements Closeable {
     // return to original position
     out.seek(stripStartPos);
 
+    ByteArrayOutputStream stripBuffer = new ByteArrayOutputStream();
     long stripOffset = 0;
     for (int i=0; i<strips.length; i++) {
-      out.seek(stripStartPos + stripOffset);
-      stripOffset += strips[i].length;
       int index = interleaved ? i : (i / nChannels) * nChannels;
       int c = interleaved ? 0 : i % nChannels;
       int thisOffset = firstOffset + index + (c * tileCount);
-      offsets[thisOffset] = out.getFilePointer();
-//      byteCounts.set(thisOffset, new Long(strips[i].length));
+      offsets[thisOffset] = stripStartPos + stripOffset;
       byteCounts[thisOffset] = strips[i].length;
       if (LOGGER.isDebugEnabled()) {
         LOGGER.debug(String.format(
@@ -1181,8 +1191,12 @@ public class TiffSaver implements Closeable {
             thisOffset + 1, totalTiles, byteCounts[thisOffset],
             offsets[thisOffset]));
       }
-      out.write(strips[i]);
+      stripBuffer.write(strips[i]);
+      stripOffset += strips[i].length;
     }
+    stripBuffer.writeTo(out);
+    stripBuffer.close();
+    stripBuffer = null;
     if (isTiled) {
       ifd.putIFDValue(IFD.TILE_BYTE_COUNTS, byteCounts);
       ifd.putIFDValue(IFD.TILE_OFFSETS, offsets);

@@ -246,7 +246,7 @@ public class SpiderReader extends FormatReader {
 
     m.imageCount = (int) Math.max(nSlice, 1);
     if (maxim > 0) {
-      m.imageCount *= maxim;
+      m.imageCount = (int) (maxim * m.imageCount);
     }
     m.sizeZ = getImageCount();
     m.sizeC = 1;
@@ -274,7 +274,7 @@ public class SpiderReader extends FormatReader {
     }
 
     if (getMetadataOptions().getMetadataLevel() != MetadataLevel.MINIMUM) {
-      Double size = new Double(pixelSize);
+      Double size = Double.valueOf(pixelSize);
       Length sizeX = FormatTools.getPhysicalSizeX(size, UNITS.ANGSTROM);
       Length sizeY = FormatTools.getPhysicalSizeY(size, UNITS.ANGSTROM);
       if (sizeX != null) {

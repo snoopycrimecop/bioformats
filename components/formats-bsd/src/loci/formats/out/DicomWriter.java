@@ -43,7 +43,9 @@ import java.rmi.server.UID;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
+import loci.common.ByteArrayHandle;
 import loci.common.Constants;
 import loci.common.DataTools;
 import loci.common.DateTools;
@@ -58,6 +60,9 @@ import loci.formats.codec.CompressionType;
 import loci.formats.codec.JPEG2000Codec;
 import loci.formats.codec.JPEG2000CodecOptions;
 import loci.formats.codec.JPEGCodec;
+import loci.formats.dicom.DicomAttribute;
+import loci.formats.dicom.DicomJSONProvider;
+import loci.formats.dicom.ITagProvider;
 import loci.formats.dicom.DicomTag;
 import loci.formats.in.DynamicMetadataOptions;
 import loci.formats.in.MetadataOptions;
@@ -74,6 +79,9 @@ import ome.xml.model.enums.DimensionOrder;
 import ome.units.UNITS;
 import ome.units.quantity.Length;
 
+import org.perf4j.StopWatch;
+import org.perf4j.slf4j.Slf4JStopWatch;
+
 import static loci.formats.dicom.DicomAttribute.*;
 import static loci.formats.dicom.DicomVR.*;
 
@@ -82,7 +90,7 @@ import static loci.formats.dicom.DicomVR.*;
  * This is designed for whole slide images, and may not produce
  * schema-compliant files for other modalities.
  */
-public class DicomWriter extends FormatWriter {
+public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
 
   // -- Constants --
 
@@ -105,10 +113,13 @@ public class DicomWriter extends FormatWriter {
   private long[] nextIFDPointer;
   private IFD[][] ifds;
   private long fileMetaLengthPointer;
-  private int baseTileWidth = 0;
-  private int baseTileHeight = 0;
+  private int baseTileWidth = 256;
+  private int baseTileHeight = 256;
   private int[] tileWidth;
   private int[] tileHeight;
+  private long[] tileWidthPointer;
+  private long[] tileHeightPointer;
+  private long[] tileCountPointer;
   private PlaneOffset[][] planeOffsets;
   private Integer currentPlane = null;
   private UIDCreator uids;
@@ -116,6 +127,7 @@ public class DicomWriter extends FormatWriter {
   private String instanceUIDValue;
   private String implementationUID;
 
+  private ArrayList<ITagProvider> tagProviders = new ArrayList<ITagProvider>();
   private boolean bigTiff = false;
   private TiffSaver tiffSaver;
 
@@ -130,6 +142,37 @@ public class DicomWriter extends FormatWriter {
       CompressionType.JPEG.getCompression(),
       CompressionType.J2K.getCompression()
     };
+  }
+
+  // -- IExtraMetadataWriter API methods --
+
+  @Override
+  public void setExtraMetadata(String tagSource) {
+    FormatTools.assertId(currentId, false, 1);
+
+    StopWatch metadataWatch = stopWatch();
+
+    // get the provider (parser) from the source name
+    // uses the file extension, this might need improvement
+
+    if (tagSource != null) {
+      ITagProvider provider = null;
+      if (checkSuffix(tagSource, "json")) {
+        provider = new DicomJSONProvider();
+      }
+      else {
+        throw new IllegalArgumentException("Unknown tag format: " + tagSource);
+      }
+
+      try {
+        provider.readTagSource(tagSource);
+        tagProviders.add(provider);
+      }
+      catch (IOException e) {
+        LOGGER.error("Could not parse extra metadata: " + tagSource, e);
+      }
+    }
+    metadataWatch.stop("parsed extra metadata from " + tagSource);
   }
 
   /**
@@ -160,23 +203,202 @@ public class DicomWriter extends FormatWriter {
   @Override
   public void setSeries(int s) throws FormatException {
     super.setSeries(s);
+    StopWatch seriesWatch = stopWatch();
     try {
       openFile(series, resolution);
     }
     catch (IOException e) {
       LOGGER.error("Could not open file for series #" + s, e);
     }
+    finally {
+      seriesWatch.stop("setSeries(" + s + ")");
+    }
   }
 
   @Override
   public void setResolution(int r) {
     super.setResolution(r);
+    StopWatch resolutionWatch = stopWatch();
     try {
       openFile(series, resolution);
     }
     catch (IOException e) {
       LOGGER.error("Could not open file for series #" + series + ", resolution #" + r, e);
     }
+    finally {
+      resolutionWatch.stop("setResolution(" + r + ")");
+    }
+  }
+
+  @Override
+  public Codec getCodec() {
+    if (CompressionType.JPEG.getCompression().equals(compression)) {
+      return new JPEGCodec();
+    }
+    else if (CompressionType.J2K.getCompression().equals(compression)) {
+      return new JPEG2000Codec();
+    }
+    return null;
+  }
+
+  @Override
+  public void saveCompressedBytes(int no, byte[] buf, int x, int y, int w, int h)
+    throws FormatException, IOException
+  {
+    checkPrecompressedSupport();
+
+    LOGGER.debug("savePrecompressedBytes(series={}, resolution={}, no={}, x={}, y={})",
+      series, resolution, no, x, y);
+
+    MetadataRetrieve r = getMetadataRetrieve();
+
+    StopWatch precompressedWatch = stopWatch();
+
+    int bytesPerPixel = FormatTools.getBytesPerPixel(
+      FormatTools.pixelTypeFromString(
+      r.getPixelsType(series).toString()));
+    int resolutionIndex = getIndex(series, resolution);
+
+    if (buf.length == 0) {
+      LOGGER.warn("Zero-length tile encountered (series={}, resolution={}, no={}, x={}, y={}; creating blank tile",
+        series, resolution, no, x, y);
+      int thisTileWidth = tileWidth[resolutionIndex];
+      int thisTileHeight = tileHeight[resolutionIndex];
+      byte[] emptyTile = new byte[thisTileWidth * thisTileHeight * bytesPerPixel * getSamplesPerPixel()];
+
+      if (compression == null || compression.equals(CompressionType.UNCOMPRESSED.getCompression())) {
+        buf = emptyTile;
+      }
+      else {
+        Codec codec = getCodec();
+        CodecOptions options = new CodecOptions();
+        options.width = w;
+        options.height = h;
+        options.channels = getSamplesPerPixel();
+        options.bitsPerSample = bytesPerPixel * 8;
+        options.littleEndian = out.isLittleEndian();
+        options.interleaved = true;
+
+        if (codec instanceof JPEG2000Codec) {
+          options = JPEG2000CodecOptions.getDefaultOptions(options);
+          ((JPEG2000CodecOptions) options).numDecompositionLevels = 0;
+        }
+        buf = codec.compress(emptyTile, options);
+      }
+    }
+
+    // TODO: refactor code shared with saveBytes, e.g. IFD handling?
+
+    boolean first = x == 0 && y == 0;
+    boolean last = x + w == getSizeX() && y + h == getSizeY();
+
+    int width = getSizeX();
+    int height = getSizeY();
+    int sizeZ = r.getPixelsSizeZ(series).getValue().intValue();
+
+    int tileCountX = (int) Math.ceil((double) width / tileWidth[resolutionIndex]);
+    int tileCountY = (int) Math.ceil((double) height / tileHeight[resolutionIndex]);
+
+    // the compression type isn't supplied to the writer until
+    // after setId is called, so metadata that indicates or
+    // depends on the compression type needs to be set in
+    // the first call to saveBytes for each file
+    if (first) {
+      out.seek(transferSyntaxPointer[resolutionIndex]);
+      out.writeBytes(getTransferSyntax());
+
+      out.seek(compressionMethodPointer[resolutionIndex]);
+      out.writeBytes(getCompressionMethod());
+
+      ifds[resolutionIndex][no].put(IFD.COMPRESSION, getTIFFCompression().getCode());
+
+      // see https://github.com/ome/bioformats/issues/3856
+      if (getTIFFCompression() == TiffCompression.JPEG) {
+        ifds[resolutionIndex][no].put(IFD.PHOTOMETRIC_INTERPRETATION, PhotoInterp.Y_CB_CR.getCode());
+      }
+
+      out.seek(tileWidthPointer[resolutionIndex]);
+      out.writeShort((short) getTileSizeX());
+      out.seek(tileHeightPointer[resolutionIndex]);
+      out.writeShort((short) getTileSizeY());
+      out.seek(tileCountPointer[resolutionIndex]);
+
+      out.writeBytes(padString(String.valueOf(
+          tileCountX * tileCountY * sizeZ * r.getChannelCount(series))));
+    }
+    precompressedWatch.stop("precompressed tile setup");
+
+    precompressedWatch.start();
+
+    out.seek(out.length());
+    long start = out.getFilePointer();
+
+    // now write the compressed pixel data
+
+    boolean pad = buf.length % 2 == 1;
+
+    if (first) {
+      DicomTag bot = new DicomTag(ITEM, IMPLICIT);
+      bot.elementLength = 0;
+      writeTag(bot);
+    }
+
+    DicomTag item = new DicomTag(ITEM, IMPLICIT);
+    item.elementLength = buf.length;
+    if (pad) {
+      item.elementLength++;
+    }
+    item.value = buf;
+    writeTag(item);
+    if (pad) {
+      out.writeByte(0);
+    }
+
+    precompressedWatch.stop("wrote precompressed tile");
+
+    precompressedWatch.start();
+
+    // update the IFD to include this tile
+    int xTiles = (int) Math.ceil((double) getSizeX() / tileWidth[resolutionIndex]);
+    int xTile = x / tileWidth[resolutionIndex];
+    int yTile = y / tileHeight[resolutionIndex];
+    int tileIndex = (yTile * xTiles) + xTile;
+    long[] tileByteCounts = null;
+    long[] tileOffsets = null;
+
+    // IFD is expected to be null if dual personality writing was turned off
+    if (ifds[resolutionIndex][no] != null) {
+      tileByteCounts = (long[]) ifds[resolutionIndex][no].getIFDValue(IFD.TILE_BYTE_COUNTS);
+      tileOffsets = (long[]) ifds[resolutionIndex][no].getIFDValue(IFD.TILE_OFFSETS);
+
+      if (tileByteCounts.length < tileCountX * tileCountY) {
+        long[] newTileByteCounts = new long[tileCountX * tileCountY];
+        long[] newTileOffsets = new long[tileCountX * tileCountY];
+        System.arraycopy(tileByteCounts, 0, newTileByteCounts, 0, tileByteCounts.length);
+        System.arraycopy(tileOffsets, 0, newTileOffsets, 0, tileOffsets.length);
+        tileByteCounts = newTileByteCounts;
+        tileOffsets = newTileOffsets;
+        ifds[resolutionIndex][no].put(IFD.TILE_BYTE_COUNTS, tileByteCounts);
+        ifds[resolutionIndex][no].put(IFD.TILE_OFFSETS, tileOffsets);
+      }
+    }
+
+    if (tileByteCounts != null) {
+      tileByteCounts[tileIndex] = buf.length;
+    }
+    if (tileOffsets != null) {
+      tileOffsets[tileIndex] = out.getFilePointer() - buf.length;
+      if (pad) {
+        tileOffsets[tileIndex]--;
+      }
+    }
+
+    if (last) {
+      DicomTag end = new DicomTag(SEQUENCE_DELIMITATION_ITEM, IMPLICIT);
+      end.elementLength = 0;
+      writeTag(end);
+    }
+    precompressedWatch.stop("updated IFD");
   }
 
   /**
@@ -188,18 +410,27 @@ public class DicomWriter extends FormatWriter {
   {
     checkParams(no, buf, x, y, w, h);
 
+    int resolutionIndex = getIndex(series, resolution);
+    int thisTileWidth = tileWidth[resolutionIndex];
+    int thisTileHeight = tileHeight[resolutionIndex];
+
     MetadataRetrieve r = getMetadataRetrieve();
-    if ((!(r instanceof IPyramidStore) ||
-      ((IPyramidStore) r).getResolutionCount(series) == 1) &&
-      !isFullPlane(x, y, w, h))
+    if (x % thisTileWidth != 0 || y % thisTileHeight != 0 ||
+      (w != thisTileWidth && x + w != getSizeX()) ||
+      (h != thisTileHeight && y + h != getSizeY()))
     {
-      throw new FormatException("DicomWriter does not allow tiles for non-pyramid images");
+      throw new FormatException("Tile too small, expected " + thisTileWidth + "x" + thisTileHeight +
+        ". Setting the tile size to " + getSizeX() + "x" + getSizeY() + " or smaller may work.");
     }
+    StopWatch tileWatch = stopWatch();
     checkPixelCount(false);
 
     boolean first = x == 0 && y == 0;
     boolean last = x + w == getSizeX() && y + h == getSizeY();
-    int resolutionIndex = getIndex(series, resolution);
+
+    int xTiles = (int) Math.ceil((double) getSizeX() / thisTileWidth);
+    int yTiles = (int) Math.ceil((double) getSizeY() / thisTileHeight);
+    int sizeZ = r.getPixelsSizeZ(series).getValue().intValue();
 
     // the compression type isn't supplied to the writer until
     // after setId is called, so metadata that indicates or
@@ -222,6 +453,15 @@ public class DicomWriter extends FormatWriter {
           ifds[resolutionIndex][no].put(IFD.PHOTOMETRIC_INTERPRETATION, PhotoInterp.Y_CB_CR.getCode());
         }
       }
+
+      out.seek(tileWidthPointer[resolutionIndex]);
+      out.writeShort((short) getTileSizeX());
+      out.seek(tileHeightPointer[resolutionIndex]);
+      out.writeShort((short) getTileSizeY());
+      out.seek(tileCountPointer[resolutionIndex]);
+
+      out.writeBytes(padString(String.valueOf(
+          xTiles * yTiles * sizeZ * r.getChannelCount(series))));
     }
 
     // TILED_SPARSE, so the tile coordinates must be written
@@ -253,28 +493,29 @@ public class DicomWriter extends FormatWriter {
         }
       }
     }
+    tileWatch.stop("setup tile writing");
 
-    MetadataRetrieve retrieve = getMetadataRetrieve();
+    tileWatch.start();
+
     int bytesPerPixel = FormatTools.getBytesPerPixel(
       FormatTools.pixelTypeFromString(
-      retrieve.getPixelsType(series).toString()));
+      r.getPixelsType(series).toString()));
+    int samplesPerPixel = getSamplesPerPixel();
 
     out.seek(out.length());
     long start = out.getFilePointer();
 
     byte[] paddedBuf = null;
 
-    int thisTileWidth = tileWidth[resolutionIndex];
-    int thisTileHeight = tileHeight[resolutionIndex];
     int thisTilePixels = thisTileWidth * thisTileHeight;
 
     // pad the last row and column of tiles to match specified tile size
     if ((x + w == getSizeX() && w < thisTileWidth) ||
       (y + h == getSizeY() && h < thisTileHeight))
     {
-      if (interleaved || getSamplesPerPixel() == 1) {
-        int srcRowLen = w * bytesPerPixel * getSamplesPerPixel();
-        int destRowLen = thisTileWidth * bytesPerPixel * getSamplesPerPixel();
+      if (interleaved || samplesPerPixel == 1) {
+        int srcRowLen = w * bytesPerPixel * samplesPerPixel;
+        int destRowLen = thisTileWidth * bytesPerPixel * samplesPerPixel;
         paddedBuf = new byte[thisTileHeight * destRowLen];
 
         for (int row=0; row<h; row++) {
@@ -284,9 +525,9 @@ public class DicomWriter extends FormatWriter {
       else {
         int srcRowLen = w * bytesPerPixel;
         int destRowLen = thisTileWidth * bytesPerPixel;
-        paddedBuf = new byte[thisTileHeight * destRowLen * getSamplesPerPixel()];
+        paddedBuf = new byte[thisTileHeight * destRowLen * samplesPerPixel];
 
-        for (int c=0; c<getSamplesPerPixel(); c++) {
+        for (int c=0; c<samplesPerPixel; c++) {
           for (int row=0; row<h; row++) {
             int src = srcRowLen * ((c * h) + row);
             int dest = destRowLen * ((c * thisTileHeight) + row);
@@ -300,24 +541,29 @@ public class DicomWriter extends FormatWriter {
     }
     if (!isInterleaved()) {
       byte[] interleavedBuf = new byte[paddedBuf.length];
-      for (int c=0; c<getSamplesPerPixel(); c++) {
-        for (int px=0; px<thisTilePixels; px++) {
+      for (int c=0; c<samplesPerPixel; c++) {
+        int channelIndex = c * bytesPerPixel;
+        int splitChannelIndex = thisTilePixels * channelIndex;
+        for (int px=0, pixelIndex=0; px<thisTilePixels; px++, pixelIndex+=bytesPerPixel) {
+          int interleavedPixelIndex = pixelIndex * samplesPerPixel;
           for (int b=0; b<bytesPerPixel; b++) {
-            interleavedBuf[px * getSamplesPerPixel() * bytesPerPixel + c * bytesPerPixel + b] = paddedBuf[c * thisTilePixels * bytesPerPixel + px * bytesPerPixel + b];
+            interleavedBuf[interleavedPixelIndex + channelIndex + b] = paddedBuf[splitChannelIndex + pixelIndex + b];
           }
         }
       }
 
       paddedBuf = interleavedBuf;
     }
+    tileWatch.stop("repacked tile for compression");
 
     // now we actually compress and write the pixel data
+
+    tileWatch.start();
 
     // we need to know the tile index to write save the tile offset
     // in the IFD
     // this tries to calculate the index without assuming sequential tile
     // writing, but maybe there is a better way to calculate this?
-    int xTiles = (int) Math.ceil((double) getSizeX() / tileWidth[resolutionIndex]);
     int xTile = x / tileWidth[resolutionIndex];
     int yTile = y / tileHeight[resolutionIndex];
     int tileIndex = (yTile * xTiles) + xTile;
@@ -327,6 +573,17 @@ public class DicomWriter extends FormatWriter {
     if (ifds[resolutionIndex][no] != null) {
       tileByteCounts = (long[]) ifds[resolutionIndex][no].getIFDValue(IFD.TILE_BYTE_COUNTS);
       tileOffsets = (long[]) ifds[resolutionIndex][no].getIFDValue(IFD.TILE_OFFSETS);
+
+      if (tileByteCounts.length < xTiles * yTiles) {
+        long[] newTileByteCounts = new long[xTiles * yTiles];
+        long[] newTileOffsets = new long[xTiles * yTiles];
+        System.arraycopy(tileByteCounts, 0, newTileByteCounts, 0, tileByteCounts.length);
+        System.arraycopy(tileOffsets, 0, newTileOffsets, 0, tileOffsets.length);
+        tileByteCounts = newTileByteCounts;
+        tileOffsets = newTileOffsets;
+        ifds[resolutionIndex][no].put(IFD.TILE_BYTE_COUNTS, tileByteCounts);
+        ifds[resolutionIndex][no].put(IFD.TILE_OFFSETS, tileOffsets);
+      }
     }
 
     if (compression == null || compression.equals(CompressionType.UNCOMPRESSED.getCompression())) {
@@ -351,10 +608,10 @@ public class DicomWriter extends FormatWriter {
     }
     else {
       Codec codec = getCodec();
-      CodecOptions options = new CodecOptions();
+      CodecOptions options = new CodecOptions(getCodecOptions());
       options.width = tileWidth[resolutionIndex];
       options.height = tileHeight[resolutionIndex];
-      options.channels = getSamplesPerPixel();
+      options.channels = samplesPerPixel;
       options.bitsPerSample = bytesPerPixel * 8;
       options.littleEndian = out.isLittleEndian();
       options.interleaved = true;
@@ -396,7 +653,7 @@ public class DicomWriter extends FormatWriter {
         writeTag(end);
       }
     }
-
+    tileWatch.stop("compressed and wrote tile");
   }
 
   /* @see loci.formats.IFormatWriter#canDoStacks() */
@@ -427,6 +684,8 @@ public class DicomWriter extends FormatWriter {
       }
       out.close();
     }
+
+    StopWatch initWatch = stopWatch();
 
     checkPixelCount(true);
 
@@ -459,12 +718,18 @@ public class DicomWriter extends FormatWriter {
     planeOffsets = new PlaneOffset[totalFiles][];
     tileWidth = new int[totalFiles];
     tileHeight = new int[totalFiles];
+    tileWidthPointer = new long[totalFiles];
+    tileHeightPointer = new long[totalFiles];
+    tileCountPointer = new long[totalFiles];
 
     // create UIDs that must be consistent across all files in the dataset
     String specimenUIDValue = uids.getUID();
     implementationUID = uids.getUID();
     String seriesInstanceUID = uids.getUID();
     String studyInstanceUID = uids.getUID();
+
+    initWatch.stop("setup data structures");
+    initWatch.start();
 
     for (int pyramid=0; pyramid<r.getImageCount(); pyramid++) {
       series = pyramid;
@@ -473,6 +738,7 @@ public class DicomWriter extends FormatWriter {
         resolutionCount = ((IPyramidStore) r).getResolutionCount(pyramid);
       }
       for (int res=0; res<resolutionCount; res++) {
+        StopWatch resolutionWatch = stopWatch();
         instanceUIDValue = uids.getUID();
 
         resolution = res;
@@ -558,8 +824,9 @@ public class DicomWriter extends FormatWriter {
         int tileCountX = (int) Math.ceil((double) width / tileWidth[resolutionIndex]);
         int tileCountY = (int) Math.ceil((double) height / tileHeight[resolutionIndex]);
         DicomTag numberOfFrames = new DicomTag(NUMBER_OF_FRAMES, IS);
+        // save space for up to 10 digits
         numberOfFrames.value = padString(String.valueOf(
-          tileCountX * tileCountY * sizeZ * r.getChannelCount(pyramid)));
+          tileCountX * tileCountY * sizeZ * r.getChannelCount(pyramid)), " ", 10);
         tags.add(numberOfFrames);
 
         DicomTag matrixFrames = new DicomTag(TOTAL_PIXEL_MATRIX_FOCAL_PLANES, UL);
@@ -763,7 +1030,7 @@ public class DicomWriter extends FormatWriter {
           opticalSequence.children.add(illuminationTypeCodes);
 
           DicomTag wavelength = new DicomTag(ILLUMINATION_WAVELENGTH, FL);
-          Length wave = r.getChannelEmissionWavelength(pyramid, c);
+          Length wave = fixUnits(r.getChannelEmissionWavelength(pyramid, c));
           wavelength.value = new float[] {wave == null ? 1f : wave.value(UNITS.NM).floatValue()};
           opticalSequence.children.add(wavelength);
 
@@ -794,7 +1061,7 @@ public class DicomWriter extends FormatWriter {
 
         DicomTag sliceThickness = new DicomTag(SLICE_THICKNESS, DS);
         DicomTag sliceSpace = new DicomTag(SLICE_SPACING, DS);
-        Length physicalZ = r.getPixelsPhysicalSizeZ(pyramid);
+        Length physicalZ = fixUnits(r.getPixelsPhysicalSizeZ(pyramid));
         if (physicalZ != null) {
           sliceThickness.value = padString(String.valueOf(physicalZ.value(UNITS.MM)));
         }
@@ -807,8 +1074,8 @@ public class DicomWriter extends FormatWriter {
         pixelMeasuresSequence.children.add(sliceSpace);
 
         DicomTag pixelSpacing = new DicomTag(PIXEL_SPACING, DS);
-        Length physicalX = r.getPixelsPhysicalSizeX(pyramid);
-        Length physicalY = r.getPixelsPhysicalSizeY(pyramid);
+        Length physicalX = fixUnits(r.getPixelsPhysicalSizeX(pyramid));
+        Length physicalY = fixUnits(r.getPixelsPhysicalSizeY(pyramid));
         String px = physicalX == null ? "1" : String.valueOf(physicalX.value(UNITS.MM));
         String py = physicalY == null ? "1" : String.valueOf(physicalY.value(UNITS.MM));
         pixelSpacing.value = padString(px + "\\" + py);
@@ -1022,13 +1289,59 @@ public class DicomWriter extends FormatWriter {
           tags.add(labelText);
         }
 
+        // now add all supplementary tags from tag providers
+        for (ITagProvider provider : tagProviders) {
+          for (DicomTag t : provider.getTags()) {
+            boolean validTag = t.validate(tags);
+            if (validTag) {
+              padTagValues(t);
+
+              LOGGER.trace("handling supplemental tag ({}) with strategy {}", t, t.strategy);
+              switch (t.strategy) {
+                case APPEND:
+                  if (t.vr == SQ) {
+                    DicomTag existingSequence = lookupTag(tags, t);
+                    if (existingSequence == null) {
+                      tags.add(t);
+                    }
+                    else {
+                      existingSequence.children.add(makeItem());
+                      for (DicomTag child : t.children) {
+                        existingSequence.children.add(child);
+                      }
+                      existingSequence.children.add(makeItemDelimitation());
+                    }
+                  }
+                  else {
+                    tags.add(t);
+                  }
+                  break;
+                case IGNORE:
+                  // ignore current tag if a matching tag already exists
+                  DicomTag existing = lookupTag(tags, t);
+                  if (existing == null) {
+                    tags.add(t);
+                  }
+                  break;
+                case REPLACE:
+                  // replace existing tag with current tag
+                  DicomTag replace = lookupTag(tags, t);
+                  if (replace != null) {
+                    tags.remove(replace);
+                  }
+                  tags.add(t);
+                  break;
+              }
+            }
+            else {
+              LOGGER.warn("Ignoring tag {} from provider {}", t, provider);
+            }
+          }
+        }
+
         // sort tags into ascending order, then write
 
-        tags.sort(new Comparator<DicomTag>() {
-          public int compare(DicomTag a, DicomTag b) {
-            return a.attribute.getTag() - b.attribute.getTag();
-          }
-        });
+        tags.sort(null);
 
         for (DicomTag tag : tags) {
           writeTag(tag);
@@ -1092,15 +1405,18 @@ public class DicomWriter extends FormatWriter {
             ifds[resolutionIndex][plane] = ifd;
           }
         }
+        resolutionWatch.stop("wrote metadata for series=" + pyramid + ", resolution=" + res);
       }
     }
     setSeries(0);
+    initWatch.stop("finished initialization");
   }
 
   /* @see loci.formats.FormatWriter#close() */
   @Override
   public void close() throws IOException {
     if (writeDualPersonality()) {
+      StopWatch ifdWatch = stopWatch();
       // write IFDs to the end of each file
 
       MetadataRetrieve r = getMetadataRetrieve();
@@ -1112,6 +1428,11 @@ public class DicomWriter extends FormatWriter {
         for (int res=0; res<resolutionCount; res++) {
           resolution = res;
           openFile(pyramid, resolution);
+
+          if (out == null) {
+            // already closed
+            continue;
+          }
           int resolutionIndex = getIndex(pyramid, resolution);
 
           out.seek(out.length());
@@ -1125,10 +1446,15 @@ public class DicomWriter extends FormatWriter {
           long fp = out.getFilePointer();
           writeIFDs(resolutionIndex);
           long length = out.getFilePointer() - fp;
+          if (length % 2 == 1) {
+            out.writeByte(0);
+            length++;
+          }
           out.seek(fp - 4);
           out.writeInt((int) length);
         }
       }
+      ifdWatch.stop("wrote final IFDs");
     }
 
     super.close();
@@ -1143,30 +1469,57 @@ public class DicomWriter extends FormatWriter {
     ifds = null;
     tiffSaver = null;
     validPixelCount = null;
+    tileWidthPointer = null;
+    tileHeightPointer = null;
+    tileCountPointer = null;
+
+    tagProviders.clear();
 
     // intentionally don't reset tile dimensions
   }
 
   @Override
   public int setTileSizeX(int tileSize) throws FormatException {
-    baseTileWidth = tileSize;
-    return baseTileWidth;
+    if (currentId == null) {
+      baseTileWidth = tileSize;
+      return baseTileWidth;
+    }
+
+    int resolutionIndex = getIndex(series, resolution);
+    tileWidth[resolutionIndex] = tileSize;
+    return tileWidth[resolutionIndex];
   }
 
   @Override
   public int getTileSizeX() {
-    return baseTileWidth;
+    if (currentId == null) {
+      return baseTileWidth;
+    }
+
+    int resolutionIndex = getIndex(series, resolution);
+    return tileWidth[resolutionIndex];
   }
 
   @Override
   public int setTileSizeY(int tileSize) throws FormatException {
-    baseTileHeight = tileSize;
-    return baseTileHeight;
+    if (currentId == null) {
+      baseTileHeight = tileSize;
+      return baseTileHeight;
+    }
+
+    int resolutionIndex = getIndex(series, resolution);
+    tileHeight[resolutionIndex] = tileSize;
+    return tileHeight[resolutionIndex];
   }
 
   @Override
   public int getTileSizeY() {
-    return baseTileHeight;
+    if (currentId == null) {
+      return baseTileHeight;
+    }
+
+    int resolutionIndex = getIndex(series, resolution);
+    return tileHeight[resolutionIndex];
   }
 
   // -- DicomWriter-specific methods --
@@ -1202,44 +1555,59 @@ public class DicomWriter extends FormatWriter {
   }
 
   private void writeTag(DicomTag tag) throws IOException {
-    int tagCode = tag.attribute.getTag();
+    writeTag(tag, out);
+  }
 
-    out.writeShort((short) ((tagCode & 0xffff0000) >> 16));
-    out.writeShort((short) (tagCode & 0xffff));
+  private void writeTag(DicomTag tag, RandomAccessOutputStream output) throws IOException {
+    StopWatch tagWatch = stopWatch();
+    int tagCode = tag.attribute == null ? tag.tag : tag.attribute.getTag();
+
+    output.writeShort((short) ((tagCode & 0xffff0000) >> 16));
+    output.writeShort((short) (tagCode & 0xffff));
 
     if (tag.vr == IMPLICIT) {
-      out.writeInt(getStoredLength(tag));
+      output.writeInt(getStoredLength(tag));
     }
     else {
-      boolean order = out.isLittleEndian();
-      out.order(false);
-      out.writeShort(tag.vr.getCode());
-      out.order(order);
+      boolean order = output.isLittleEndian();
+      output.order(false);
+      output.writeShort(tag.vr.getCode());
+      output.order(order);
 
       if (tag.vr == OB || tag.vr == OW || tag.vr == SQ ||
         tag.vr == UN || tag.vr == UT || tag.vr == UC)
       {
-        out.writeShort((short) 0);
-        out.writeInt(getStoredLength(tag));
+        output.writeShort((short) 0);
+        output.writeInt(getStoredLength(tag));
       }
       else {
-        out.writeShort((short) getStoredLength(tag));
+        output.writeShort((short) getStoredLength(tag));
       }
 
+      int resolutionIndex = getIndex(series, resolution);
       if (tag.attribute == TRANSFER_SYNTAX_UID) {
-        transferSyntaxPointer[getIndex(series, resolution)] = out.getFilePointer();
+        transferSyntaxPointer[resolutionIndex] = output.getFilePointer();
       }
       else if (tag.attribute == LOSSY_IMAGE_COMPRESSION_METHOD) {
-        compressionMethodPointer[getIndex(series, resolution)] = out.getFilePointer();
+        compressionMethodPointer[resolutionIndex] = output.getFilePointer();
       }
       else if (tag.attribute == FILE_META_INFO_GROUP_LENGTH) {
-        fileMetaLengthPointer = out.getFilePointer();
+        fileMetaLengthPointer = output.getFilePointer();
+      }
+      else if (tag.attribute == ROWS) {
+        tileHeightPointer[resolutionIndex] = out.getFilePointer();
+      }
+      else if (tag.attribute == COLUMNS) {
+        tileWidthPointer[resolutionIndex] = out.getFilePointer();
+      }
+      else if (tag.attribute == NUMBER_OF_FRAMES) {
+        tileCountPointer[resolutionIndex] = out.getFilePointer();
       }
 
       // sequences with no items still need to write a SequenceDelimitationItem below
       if (tag.children.size() == 0 && tag.value == null && tag.vr != SQ) {
         if (tag.attribute != PIXEL_DATA) {
-          out.skipBytes(tag.elementLength);
+          output.skipBytes(tag.elementLength);
         }
         return;
       }
@@ -1290,27 +1658,27 @@ public class DicomWriter extends FormatWriter {
         }
         switch (tag.attribute) {
           case OPTICAL_PATH_ID:
-            planeOffsets[resolutionIndex][currentPlane].cOffset = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].cOffset = output.getFilePointer();
             break;
           case ROW_POSITION_IN_MATRIX:
-            planeOffsets[resolutionIndex][currentPlane].yOffset = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].yOffset = output.getFilePointer();
             break;
           case COLUMN_POSITION_IN_MATRIX:
-            planeOffsets[resolutionIndex][currentPlane].xOffset = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].xOffset = output.getFilePointer();
             break;
           case DIMENSION_INDEX_VALUES:
-            planeOffsets[resolutionIndex][currentPlane].dimensionIndex = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].dimensionIndex = output.getFilePointer();
             break;
           case X_OFFSET_IN_SLIDE:
-            planeOffsets[resolutionIndex][currentPlane].xOffsetReal = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].xOffsetReal = output.getFilePointer();
             planeOffsets[resolutionIndex][currentPlane].xOffsetSize = tag.elementLength;
             break;
           case Y_OFFSET_IN_SLIDE:
-            planeOffsets[resolutionIndex][currentPlane].yOffsetReal = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].yOffsetReal = output.getFilePointer();
             planeOffsets[resolutionIndex][currentPlane].yOffsetSize = tag.elementLength;
             break;
           case Z_OFFSET_IN_SLIDE:
-            planeOffsets[resolutionIndex][currentPlane].zOffset = out.getFilePointer();
+            planeOffsets[resolutionIndex][currentPlane].zOffset = output.getFilePointer();
             planeOffsets[resolutionIndex][currentPlane].zOffsetSize = tag.elementLength;
             break;
         }
@@ -1333,58 +1701,59 @@ public class DicomWriter extends FormatWriter {
         case UI:
         case UR:
         case UT:
-          out.writeBytes(tag.value.toString());
+          output.writeBytes(tag.value.toString());
           break;
         case AT:
           for (short s : (short[]) tag.value) {
-            out.writeShort(s);
+            output.writeShort(s);
           }
           break;
         case FL:
           for (float f : (float[]) tag.value) {
-            out.writeFloat(f);
+            output.writeFloat(f);
           }
           break;
         case FD:
           for (double d : (double[]) tag.value) {
-            out.writeDouble(d);
+            output.writeDouble(d);
           }
           break;
         case OB:
-          out.write((byte[]) tag.value);
+          output.write((byte[]) tag.value);
           break;
         case SL:
           for (int v : (int[]) tag.value) {
-            out.writeInt(v);
+            output.writeInt(v);
           }
           break;
         case SS:
           for (short s : (short[]) tag.value) {
-            out.writeShort(s);
+            output.writeShort(s);
           }
           break;
         case SV:
           for (long v : (long[]) tag.value) {
-            out.writeLong(v);
+            output.writeLong(v);
           }
           break;
         case UL:
           for (long v : (long[]) tag.value) {
-            out.writeInt((int) (v & 0xffffffff));
+            output.writeInt((int) (v & 0xffffffff));
           }
           break;
         case US:
           for (short s : (short[]) tag.value) {
-            out.writeShort(s);
+            output.writeShort(s);
           }
           break;
         case IMPLICIT:
-          out.write((byte[]) tag.value);
+          output.write((byte[]) tag.value);
           break;
         default:
           throw new IllegalArgumentException(String.valueOf(tag.vr.getCode()));
       }
     }
+    tagWatch.stop("wrote single tag: " + tag);
   }
 
   /**
@@ -1421,6 +1790,17 @@ public class DicomWriter extends FormatWriter {
       return value;
     }
     return value + append;
+  }
+
+  private String padString(String value, String append, int length) {
+    String rtn = "";
+    if (value != null) {
+      rtn += value;
+    }
+    while (rtn.length() < length) {
+      rtn += append;
+    }
+    return rtn;
   }
 
   /**
@@ -1462,25 +1842,13 @@ public class DicomWriter extends FormatWriter {
     return padString("NOT_DEFINED");
   }
 
-  /**
-   * @return Codec instance corresponding to current compression type
-   */
-  private Codec getCodec() {
-    if (CompressionType.JPEG.getCompression().equals(compression)) {
-      return new JPEGCodec();
-    }
-    else if (CompressionType.J2K.getCompression().equals(compression)) {
-      return new JPEG2000Codec();
-    }
-    return null;
-  }
-
   private void openFile(int pyramid, int res) throws IOException {
     if (pixelDataLengthPointer == null) {
       // not fully initialized, can't reliably determine
       // filename for this series/resolution
       return;
     }
+    StopWatch openWatch = stopWatch();
     if (out != null) {
       out.close();
     }
@@ -1502,6 +1870,7 @@ public class DicomWriter extends FormatWriter {
     if (out.length() == 0) {
       writeHeader();
     }
+    openWatch.stop("opened " + filename);
   }
 
   /**
@@ -1509,79 +1878,89 @@ public class DicomWriter extends FormatWriter {
    * See http://dicom.nema.org/medical/dicom/current/output/html/part10.html#sect_7.1
    */
   private void writeHeader() throws IOException {
+    StopWatch headerWatch = stopWatch();
+    ByteArrayHandle buffer = new ByteArrayHandle();
+    RandomAccessOutputStream headerBuffer = new RandomAccessOutputStream(buffer);
     boolean littleEndian = out.isLittleEndian();
+    headerBuffer.order(littleEndian);
     if (writeDualPersonality()) {
       // write a TIFF header in the preamble
       if (littleEndian) {
-        out.writeByte(TiffConstants.LITTLE);
-        out.writeByte(TiffConstants.LITTLE);
+        headerBuffer.writeByte(TiffConstants.LITTLE);
+        headerBuffer.writeByte(TiffConstants.LITTLE);
       }
       else {
-        out.writeByte(TiffConstants.BIG);
-        out.writeByte(TiffConstants.BIG);
+        headerBuffer.writeByte(TiffConstants.BIG);
+        headerBuffer.writeByte(TiffConstants.BIG);
       }
       if (bigTiff) {
-        out.writeShort(TiffConstants.BIG_TIFF_MAGIC_NUMBER);
-        out.writeShort(8); // number of bytes in an offset
-        out.writeShort(0); // reserved
+        headerBuffer.writeShort(TiffConstants.BIG_TIFF_MAGIC_NUMBER);
+        headerBuffer.writeShort(8); // number of bytes in an offset
+        headerBuffer.writeShort(0); // reserved
 
-        nextIFDPointer[getIndex(series, resolution)] = out.getFilePointer();
-        out.writeLong(-1); // placeholder to first IFD
+        nextIFDPointer[getIndex(series, resolution)] = headerBuffer.getFilePointer();
+        headerBuffer.writeLong(-1); // placeholder to first IFD
       }
       else {
-        out.writeShort(TiffConstants.MAGIC_NUMBER);
-        nextIFDPointer[getIndex(series, resolution)] = out.getFilePointer();
-        out.writeInt(-1); // placeholder to first IFD
+        headerBuffer.writeShort(TiffConstants.MAGIC_NUMBER);
+        nextIFDPointer[getIndex(series, resolution)] = headerBuffer.getFilePointer();
+        headerBuffer.writeInt(-1); // placeholder to first IFD
       }
     }
     else {
       byte[] preamble = new byte[128];
-      out.write(preamble);
+      headerBuffer.write(preamble);
     }
 
     // seek to end of preamble, then write DICOM header
-    out.seek(128);
-    out.order(true);
-    out.writeBytes("DICM");
+    headerBuffer.seek(128);
+    headerBuffer.order(true);
+    headerBuffer.writeBytes("DICM");
 
     DicomTag fileMetaLength = new DicomTag(FILE_META_INFO_GROUP_LENGTH, UL);
     // placeholder value, overwritten at the end of this method
     fileMetaLength.value = new long[] {0};
-    writeTag(fileMetaLength);
+    writeTag(fileMetaLength, headerBuffer);
 
     DicomTag fileMetaVersion = new DicomTag(FILE_META_INFO_VERSION, OB);
     fileMetaVersion.value = new byte[] {0, 1};
-    writeTag(fileMetaVersion);
+    writeTag(fileMetaVersion, headerBuffer);
 
     DicomTag mediaStorageClassUID = new DicomTag(MEDIA_SOP_CLASS_UID, UI);
     mediaStorageClassUID.value = padUID(SOP_CLASS_UID_VALUE);
-    writeTag(mediaStorageClassUID);
+    writeTag(mediaStorageClassUID, headerBuffer);
 
     DicomTag mediaStorageInstanceUID = new DicomTag(MEDIA_SOP_INSTANCE_UID, UI);
     mediaStorageInstanceUID.value = padUID(instanceUIDValue);
-    writeTag(mediaStorageInstanceUID);
+    writeTag(mediaStorageInstanceUID, headerBuffer);
 
     // placeholder, will be overwritten on the first call to saveBytes
     DicomTag transferSyntaxUID = new DicomTag(TRANSFER_SYNTAX_UID, UI);
     transferSyntaxUID.elementLength = 22;
-    writeTag(transferSyntaxUID);
+    writeTag(transferSyntaxUID, headerBuffer);
 
     DicomTag implementationClassUID = new DicomTag(IMPLEMENTATION_UID, UI);
     implementationClassUID.value = padUID(implementationUID);
-    writeTag(implementationClassUID);
+    writeTag(implementationClassUID, headerBuffer);
 
     DicomTag implementationVersionName = new DicomTag(IMPLEMENTATION_VERSION, SH);
     implementationVersionName.value = padString(FormatTools.VERSION);
-    writeTag(implementationVersionName);
+    writeTag(implementationVersionName, headerBuffer);
+
+    int bufferBytes = (int) headerBuffer.getFilePointer();
+    out.order(headerBuffer.isLittleEndian());
+    headerBuffer.close();
+    out.write(buffer.getBytes(), 0, bufferBytes);
 
     // count all bytes after the file meta length value
     int fileMetaBytes = (int) (out.getFilePointer() - fileMetaLengthPointer - 4);
     out.seek(fileMetaLengthPointer);
     out.writeInt(fileMetaBytes);
     fileMetaLengthPointer = 0;
-    out.skipBytes(fileMetaBytes);
 
+    out.skipBytes(fileMetaBytes);
     out.order(littleEndian);
+    headerWatch.stop("wrote header for series = " + series + ", resolution = " + resolution);
   }
 
   private String getFilename(int pyramid, int res) {
@@ -1633,10 +2012,11 @@ public class DicomWriter extends FormatWriter {
       return sizeC * sizeZ * sizeT == 1;
     }
 
+    // check that there is a single channel or Z section (so order doesn't matter)
+    // or the dimension order indicates that Z is before C
     DimensionOrder order = retrieve.getPixelsDimensionOrder(series);
     return sequential && (sizeC == 1 || sizeZ == 1 ||
       order == DimensionOrder.XYZCT ||
-      order == DimensionOrder.XYZTC ||
       order == DimensionOrder.XYZTC ||
       order == DimensionOrder.XYTZC);
   }
@@ -1689,6 +2069,9 @@ public class DicomWriter extends FormatWriter {
     out.seek(ifdStart);
 
     for (int no=0; no<ifds[resIndex].length; no++) {
+      ifds[resIndex][no].put(IFD.TILE_WIDTH, tileWidth[resIndex]);
+      ifds[resIndex][no].put(IFD.TILE_LENGTH, tileHeight[resIndex]);
+
       try {
         tiffSaver.writeIFD(ifds[resIndex][no], 0, no < ifds[resIndex].length - 1);
       }
@@ -1726,11 +2109,52 @@ public class DicomWriter extends FormatWriter {
     return item;
   }
 
+  private DicomTag lookupTag(List<DicomTag> tags, DicomTag compare) {
+    for (DicomTag t : tags) {
+      if (t.tag == compare.tag) {
+        return t;
+      }
+    }
+    return null;
+  }
+
+  private void padTagValues(DicomTag t) {
+    if (t.value instanceof String) {
+      if (t.vr == UI) {
+        t.value = padUID((String) t.value);
+      }
+      else {
+        t.value = padString((String) t.value);
+      }
+    }
+
+    for (DicomTag child : t.children) {
+      padTagValues(child);
+    }
+  }
+
   private short[] makeShortArray(int v) {
     short[] s = new short[2];
     s[0] = (short) ((v >> 16) & 0xffff);
     s[1] = (short) (v & 0xffff);
     return s;
+  }
+
+  /**
+   * Check if the unit for the given Length is "pixel"
+   * or "referenceframe". These two units cannot be assigned to
+   * proper physical units (e.g. mm), so need to be handled specially.
+   */
+  private Length fixUnits(Length size) {
+    if (size == null) {
+      return null;
+    }
+    if (size.unit() == UNITS.PIXEL || size.unit() == UNITS.REFERENCEFRAME) {
+      LOGGER.warn("Found physical length '{}' in relative units '{}'; this value will be lost",
+        size.value(), size.unit());
+      return null;
+    }
+    return size;
   }
 
   private TiffRational getPhysicalSize(Length size) {
@@ -1743,6 +2167,22 @@ public class DicomWriter extends FormatWriter {
     }
 
     return new TiffRational((long) (physicalSize * 1000 * 10000), 1000);
+  }
+
+  /**
+   * Check if pre-compressed tiles are supported with the current options.
+   * TODO: maybe this should be a higher-level API method?
+   *
+   * @throws UnsupportedOperationException if pre-compressed tiles are not supported
+   */
+  private void checkPrecompressedSupport() {
+    // allows both JPEG and JPEG-2000
+    if (compression == null || compression.equals(CompressionType.UNCOMPRESSED.getCompression())) {
+      throw new UnsupportedOperationException("Pre-compressed tiles not supported for compression: " + compression);
+    }
+    if (!isReallySequential()) {
+      throw new UnsupportedOperationException("Pre-compressed tiles not supported for TILED_SPARSE");
+    }
   }
 
   private void checkPixelCount(boolean warn) throws FormatException {
@@ -1772,6 +2212,10 @@ public class DicomWriter extends FormatWriter {
     if (validPixelCount == null) {
       validPixelCount = true;
     }
+  }
+
+  protected Slf4JStopWatch stopWatch() {
+    return new Slf4JStopWatch(LOGGER, Slf4JStopWatch.DEBUG_LEVEL);
   }
 
   class PlaneOffset {

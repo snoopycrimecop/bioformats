@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Set;
 
 import loci.common.Region;
+import loci.formats.codec.Codec;
 import loci.formats.codec.CodecOptions;
 import loci.formats.in.MetadataLevel;
 import loci.formats.in.MetadataOptions;
@@ -120,10 +121,9 @@ public class ImageWriter implements IFormatWriter {
     for (int i=0; i<c.length; i++) {
       IFormatWriter writer = null;
       try {
-        writer = c[i].newInstance();
+        writer = c[i].getDeclaredConstructor().newInstance();
       }
-      catch (IllegalAccessException exc) { }
-      catch (InstantiationException exc) { }
+      catch (ReflectiveOperationException exc) { }
       if (writer == null) {
         LOGGER.error("{} cannot be instantiated.", c[i].getName());
         continue;
@@ -417,6 +417,25 @@ public class ImageWriter implements IFormatWriter {
   @Override
   public void setCodecOptions(CodecOptions options) {
     getWriter().setCodecOptions(options);
+  }
+
+  // -- ICompressedTileWriter API methods --
+
+  @Override
+  public void saveCompressedBytes(int no, byte[] buf, int x, int y, int w, int h)
+    throws FormatException, IOException
+  {
+    getWriter().saveCompressedBytes(no, buf, x, y, w, h);
+  }
+
+  @Override
+  public Codec getCodec() {
+    return getWriter().getCodec();
+  }
+
+  @Override
+  public CodecOptions getCodecOptions() {
+    return getWriter().getCodecOptions();
   }
 
   // -- IFormatHandler API methods --

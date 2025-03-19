@@ -52,6 +52,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Vector;
 
@@ -60,6 +61,7 @@ import javax.swing.JOptionPane;
 import javax.swing.filechooser.FileFilter;
 
 import loci.common.DataTools;
+import loci.common.DebugTools;
 import loci.common.services.DependencyException;
 import loci.common.services.ServiceException;
 import loci.common.services.ServiceFactory;
@@ -505,7 +507,7 @@ public class Exporter {
                     String lsid = MetadataTools.createLSID("Channel", 0, c);
                     store.setChannelID(lsid, 0, c);
                 }
-                store.setChannelSamplesPerPixel(new PositiveInteger(channels), 0, 0);
+                store.setChannelSamplesPerPixel(new PositiveInteger(channels), 0, c);
 
                 if (imp instanceof CompositeImage) {
                     luts[c] = ((CompositeImage) imp).getChannelLut(c + 1);
@@ -517,7 +519,7 @@ public class Exporter {
             store.setPixelsPhysicalSizeX(FormatTools.getPhysicalSizeX(cal.pixelWidth, cal.getXUnit()), 0);
             store.setPixelsPhysicalSizeY(FormatTools.getPhysicalSizeY(cal.pixelHeight, cal.getYUnit()), 0);
             store.setPixelsPhysicalSizeZ(FormatTools.getPhysicalSizeZ(cal.pixelDepth, cal.getZUnit()), 0);
-            store.setPixelsTimeIncrement(FormatTools.getTime(new Double(cal.frameInterval), cal.getTimeUnit()), 0);
+            store.setPixelsTimeIncrement(FormatTools.getTime(Double.valueOf(cal.frameInterval), cal.getTimeUnit()), 0);
 
             if (imp.getImageStackSize() !=
                     imp.getNChannels() * imp.getNSlices() * imp.getNFrames())
@@ -538,6 +540,7 @@ public class Exporter {
             }
 
             Object info = imp.getProperty("Info");
+            Hashtable<String, Object> originalMetadata = new Hashtable<String, Object>();
             if (info != null) {
                 String imageInfo = info.toString();
                 if (imageInfo != null) {
@@ -548,13 +551,21 @@ public class Exporter {
                             String key = line.substring(0, eq).trim();
                             String value = line.substring(eq + 1).trim();
 
+                            originalMetadata.put(key, value);
+
                             if (key.endsWith("BitsPerPixel")) {
                                 w.setValidBitsPerPixel(Integer.parseInt(value));
-                                break;
                             }
                         }
                     }
                 }
+            }
+            try {
+              service.populateOriginalMetadata(service.getOMEMetadata(store), originalMetadata);
+            }
+            catch (ServiceException e) {
+              IJ.log("Could not populate original metadata");
+              IJ.log(DebugTools.getStackTrace(e));
             }
 
             // NB: Animation rate code copied from ij.plugin.Animator#doOptions().

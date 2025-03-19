@@ -32,6 +32,8 @@
 
 package loci.formats.in;
 
+import static ome.xml.model.Channel.getEmissionWavelengthUnitXsdDefault;
+import static ome.xml.model.Channel.getExcitationWavelengthUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeXUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeYUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeZUnitXsdDefault;
@@ -149,6 +151,10 @@ public class FakeReader extends FormatReader {
 
   /* physical sizes */
   private Length physicalSizeX, physicalSizeY, physicalSizeZ;
+
+  /* channel wavelengths */
+  private transient ArrayList<Length> excitationWavelengths = new ArrayList<Length>();
+  private transient ArrayList<Length> emissionWavelengths = new ArrayList<Length>();
 
   /* annotation counts per file */
   private int annBool = 0;
@@ -509,6 +515,8 @@ public class FakeReader extends FormatReader {
     plateCols = 0;
     fields = 0;
     plateAcqs = 0;
+    excitationWavelengths.clear();
+    emissionWavelengths.clear();
     super.close(fileOnly);
   }
 
@@ -607,6 +615,7 @@ public class FakeReader extends FormatReader {
     boolean metadataComplete = true;
     boolean thumbnail = false;
     boolean withMicrobeam = false;
+    boolean withInstrument = false;
 
     int seriesCount = 1;
     int resolutionCount = 1;
@@ -716,6 +725,7 @@ public class FakeReader extends FormatReader {
       else if (key.equals("fields")) fields = intValue;
       else if (key.equals("plateAcqs")) plateAcqs = intValue;
       else if (key.equals("withMicrobeam")) withMicrobeam = boolValue;
+      else if (key.equals("withInstrument")) withInstrument = boolValue;
       else if (key.equals("annLong")) annLong = intValue;
       else if (key.equals("annDouble")) annDouble = intValue;
       else if (key.equals("annMap")) annMap = intValue;
@@ -755,6 +765,20 @@ public class FakeReader extends FormatReader {
           color.add(null);
         }
         color.set(index, parseColor(value));
+      } else if (key.startsWith("emission_")) {
+        int index = Integer.parseInt(key.substring(key.indexOf('_') + 1));
+        while (index >= emissionWavelengths.size()) {
+          emissionWavelengths.add(null);
+        }
+        emissionWavelengths.set(index, parseWavelength(
+          value, getEmissionWavelengthUnitXsdDefault()));
+      } else if (key.startsWith("excitation_")) {
+        int index = Integer.parseInt(key.substring(key.indexOf('_') + 1));
+        while (index >= excitationWavelengths.size()) {
+          excitationWavelengths.add(null);
+        }
+        excitationWavelengths.set(index, parseWavelength(
+          value, getExcitationWavelengthUnitXsdDefault()));
       } else if (key.equals("sleepOpenBytes")) {
         sleepOpenBytes = intValue;
       } else if (key.equals("sleepInitFile")) {
@@ -834,6 +858,8 @@ public class FakeReader extends FormatReader {
         populateSPW(store, screens, plates, plateRows, plateCols, fields, plateAcqs, withMicrobeam);
       if (imageCount > 0) seriesCount = imageCount;
       else hasSPW = false; // failed to generate SPW metadata
+    } else if (withInstrument) {
+      populateInstrument(store);
     }
 
     // populate core metadata
@@ -878,6 +904,7 @@ public class FakeReader extends FormatReader {
     MetadataTools.populatePixels(store, this, planeInfo);
     fillExposureTime(store);
     fillPhysicalSizes(store);
+    fillChannelWavelengths(store);
     for (int currentImageIndex=0; currentImageIndex<seriesCount; currentImageIndex++) {
       if (currentImageIndex < seriesTables.size()) {
         parseSeriesTable(seriesTables.get(currentImageIndex), store, currentImageIndex);
@@ -958,6 +985,19 @@ public class FakeReader extends FormatReader {
       }
     }
     setSeries(oldSeries);
+  }
+
+  private void fillChannelWavelengths(MetadataStore store) {
+    for (int s=0; s<getSeriesCount(); s++) {
+      for (int c=0; c<getEffectiveSizeC(); c++) {
+        if (c < emissionWavelengths.size() && emissionWavelengths.get(c) != null) {
+          store.setChannelEmissionWavelength(emissionWavelengths.get(c), s, c);
+        }
+        if (c < excitationWavelengths.size() && excitationWavelengths.get(c) != null) {
+          store.setChannelExcitationWavelength(excitationWavelengths.get(c), s, c);
+        }
+      }
+    }
   }
 
   private void fillAcquisitionDate(MetadataStore store, String date, int imageIndex) {
@@ -1079,11 +1119,11 @@ public class FakeReader extends FormatReader {
   }
 
   private Double getX(int i) {
-      return new Double(ROI_SPACING * i % sizeX);
+      return (double) (ROI_SPACING * i % sizeX);
   }
 
   private Double getY(int i) {
-      return new Double(ROI_SPACING * ((int) ROI_SPACING * i / sizeX) % sizeY);
+      return (double) (ROI_SPACING * ((int) ROI_SPACING * i / sizeX) % sizeY);
   }
 
   private String getPoints(int i) {
@@ -1111,8 +1151,8 @@ public class FakeReader extends FormatReader {
         store.setEllipseID(SHAPE_PREFIX + roiCount, roiCount, 0);
         store.setEllipseX(getX(i) + ROI_SPACING / 2, roiCount, 0);
         store.setEllipseY(getY(i) + ROI_SPACING / 2, roiCount, 0);
-        store.setEllipseRadiusX(new Double(ROI_SPACING / 2), roiCount, 0);
-        store.setEllipseRadiusY(new Double(ROI_SPACING / 2), roiCount, 0);
+        store.setEllipseRadiusX(Double.valueOf(ROI_SPACING / 2), roiCount, 0);
+        store.setEllipseRadiusY(Double.valueOf(ROI_SPACING / 2), roiCount, 0);
         store.setImageROIRef(roiID, imageIndex, roiRefCount);
         roiCount++;
         roiRefCount++;
@@ -1198,8 +1238,8 @@ public class FakeReader extends FormatReader {
         store.setRectangleID(SHAPE_PREFIX + roiCount, roiCount, 0);
         store.setRectangleX(getX(i) + ROI_SPACING / 4, roiCount, 0);
         store.setRectangleY(getY(i) + ROI_SPACING / 4, roiCount, 0);
-        store.setRectangleWidth(new Double(ROI_SPACING / 2), roiCount, 0);
-        store.setRectangleHeight(new Double(ROI_SPACING / 2), roiCount, 0);
+        store.setRectangleWidth(Double.valueOf(ROI_SPACING / 2), roiCount, 0);
+        store.setRectangleHeight(Double.valueOf(ROI_SPACING / 2), roiCount, 0);
         store.setImageROIRef(roiID, imageIndex, roiRefCount);
         roiCount++;
         roiRefCount++;
@@ -1216,6 +1256,18 @@ public class FakeReader extends FormatReader {
     for (int c=0; c<getEffectiveSizeC(); c++) {
       String channelName = table.get("ChannelName_" + c);
       store.setChannelName(channelName, newSeries, c);
+      String emissionWavelength = table.get("ChannelEmissionWavelength_" + c);
+      if (emissionWavelength != null) {
+        store.setChannelEmissionWavelength(
+          parseWavelength(emissionWavelength, getEmissionWavelengthUnitXsdDefault()),
+          newSeries, c);
+      }
+      String excitationWavelength = table.get("ChannelExcitationWavelength_" + c);
+      if (excitationWavelength != null) {
+        store.setChannelExcitationWavelength(
+          parseWavelength(excitationWavelength, getExcitationWavelengthUnitXsdDefault()),
+          newSeries, c);
+      }
     }
 
     for (int i=0; i<getImageCount(); i++) {
@@ -1376,6 +1428,15 @@ public class FakeReader extends FormatReader {
     return ome.sizeOfImageList();
   }
 
+  private void populateInstrument(MetadataStore store)
+  {
+    final XMLMockObjects xml = new XMLMockObjects();
+    OME ome = xml.getRoot();
+    ome.addInstrument(xml.createInstrument(true));
+    getOmeXmlMetadata().setRoot(new OMEXMLMetadataRoot(ome));
+    getOmeXmlService().convertMetadata(omeXmlMetadata, store);
+  }
+
   /** Creates a mapping between indices and color values. */
   private void createIndexMap(int num) {
     int sizeC = core.get(0).sizeC;
@@ -1482,6 +1543,18 @@ public class FakeReader extends FormatReader {
       return null;
     }
     return physicalSize;
+  }
+
+  private Length parseWavelength(String s, String defaultUnit) {
+    Length wavelength = FormatTools.parseLength(s, defaultUnit);
+    if (wavelength == null) {
+      throw new RuntimeException("Invalid wavelength: " + s);
+    }
+    if (!FormatTools.isPositiveValue(wavelength.value().doubleValue())) {
+      LOGGER.warn("Invalid wavelength value: {}", wavelength.value());
+      return null;
+    }
+    return wavelength;
   }
 
 }

@@ -350,10 +350,16 @@ public class OperettaReader extends FormatReader {
           LOGGER.trace("Found folder {}", folder);
           if (!checkSuffix(folder, "tiff"))
           {
-            String metadataFile = new Location(path, folder).getAbsolutePath();
-            if (!metadataFile.equals(currentFile.getAbsolutePath())) {
-              metadataFiles.add(metadataFile);
-              LOGGER.trace("Adding metadata file {}", metadataFile);
+            Location metadataLocation = new Location(path, folder);
+            if (!metadataLocation.isDirectory()) {
+              String metadataFile = metadataLocation.getAbsolutePath();
+              if (!metadataFile.equals(currentFile.getAbsolutePath())) {
+                metadataFiles.add(metadataFile);
+                LOGGER.trace("Adding metadata file {}", metadataFile);
+              }
+            }
+            else {
+              LOGGER.debug("Skipping metadata folder {}", metadataLocation);
             }
           }
         }
@@ -723,11 +729,10 @@ public class OperettaReader extends FormatReader {
             FormatTools.getPhysicalSizeY(first.resolutionY), i);
 
           if (getSizeZ() > 1 && last != null) {
-            Unit<Length> firstZUnit = first.positionZ.unit();
-            double firstZ = first.positionZ.value().doubleValue();
-            double lastZ = last.positionZ.value(firstZUnit).doubleValue();
+            double firstZ = first.positionZ.value(UNITS.MICROMETER).doubleValue();
+            double lastZ = last.positionZ.value(UNITS.MICROMETER).doubleValue();
             double averageStep = (lastZ - firstZ) / (getSizeZ() - 1);
-            store.setPixelsPhysicalSizeZ(FormatTools.getPhysicalSizeZ(averageStep, firstZUnit), i);
+            store.setPixelsPhysicalSizeZ(FormatTools.getPhysicalSizeZ(averageStep, UNITS.MICROMETER), i);
           }
         }
       }
@@ -1199,6 +1204,7 @@ public class OperettaReader extends FormatReader {
   }
 
   @Override
+  @Deprecated
   protected AcquisitionMode getAcquisitionMode(String mode) throws FormatException {
     if (mode == null) {
       return null;

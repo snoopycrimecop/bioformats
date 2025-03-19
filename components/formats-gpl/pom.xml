@@ -8,7 +8,7 @@
   <parent>
     <groupId>ome</groupId>
     <artifactId>pom-bio-formats</artifactId>
-    <version>7.0.1-SNAPSHOT</version>
+    <version>8.2.0-SNAPSHOT</version>
     <relativePath>../..</relativePath>
   </parent>
 
@@ -66,7 +66,7 @@
     <dependency>
       <groupId>edu.ucar</groupId>
       <artifactId>cdm-core</artifactId>
-      <version>5.3.3</version>
+      <version>5.6.0</version>
       <exclusions>
         <exclusion>
           <groupId>com.amazonaws</groupId>
@@ -120,6 +120,11 @@
       <artifactId>kryo</artifactId>
       <version>${kryo.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.airlift</groupId>
+      <artifactId>aircompressor</artifactId>
+      <version>0.27</version>
+    </dependency>
 
     <!-- NB: dependency:analyze has false warning about xml-apis:xml-apis. -->
 
@@ -149,11 +154,6 @@
       <artifactId>logback-classic</artifactId>
       <version>${logback.version}</version>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-    	<groupId>org.json</groupId>
-    	<artifactId>json</artifactId>
-    	<version>20230227</version>
     </dependency>
     <dependency>
       <groupId>org.xerial</groupId>

@@ -154,7 +154,7 @@ public class ND2Handler extends BaseHandler {
           store.setLabelFontSize(new Length(fontSize, UNITS.POINT), r, 0);
         }
         store.setLabelText(roi.get("eval-text"), r, 0);
-        Length l = new Length(new Double(roi.get("line-width")), UNITS.PIXEL);
+        Length l = new Length(Double.parseDouble(roi.get("line-width")), UNITS.PIXEL);
         store.setLabelStrokeWidth(l, r, 0);
 
         String rectangle = roi.get("rectangle");
@@ -568,7 +568,7 @@ public class ND2Handler extends BaseHandler {
       }
       else if (qName.endsWith("ChannelColor")) {
         String name = qName.substring(0, qName.indexOf("Channel"));
-        colors.put(name, new Integer(value));
+        colors.put(name, Integer.parseInt(value));
       }
       else if (qName.endsWith("DyeName")) {
         int channelIndex = qName.indexOf("Channel");
@@ -791,6 +791,7 @@ public class ND2Handler extends BaseHandler {
               int tSize = ms0.sizeT;
               int c = ms0.sizeC;
               String order = ms0.dimensionOrder;
+              int pixelType = ms0.pixelType;
               core = new CoreMetadataList();
               for (int i=0; i<numSeries; i++) {
                 CoreMetadata ms = new CoreMetadata();
@@ -801,6 +802,7 @@ public class ND2Handler extends BaseHandler {
                 ms.sizeC = c == 0 ? 1 : c;
                 ms.sizeT = tSize == 0 ? 1 : tSize;
                 ms.dimensionOrder = order;
+                ms.pixelType = pixelType;
               }
               ms0 = core.get(0, 0);
             }
@@ -885,11 +887,11 @@ public class ND2Handler extends BaseHandler {
       }
       else if (key.equalsIgnoreCase("Emission wavelength")) {
         String[] v = value.split(" ");
-        emWave.add(new Double(v[0]));
+        emWave.add(Double.parseDouble(v[0]));
       }
       else if (key.equalsIgnoreCase("Excitation wavelength")) {
         String[] v = value.split(" ");
-        exWave.add(new Double(v[0]));
+        exWave.add(Double.parseDouble(v[0]));
       }
       else if (key.equals("Power")) {
         power.add(DataTools.parseDouble(value).intValue());
@@ -898,7 +900,7 @@ public class ND2Handler extends BaseHandler {
         cameraModel = value;
       }
       else if (key.equals("ExposureTime")) {
-        exposureTime.add(new Double(value) / 1000d);
+        exposureTime.add(Double.parseDouble(value) / 1000d);
       }
       else if (key.equals("sDate")) {
         date = DateTools.formatDate(value, DATE_FORMAT);

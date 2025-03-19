@@ -70,6 +70,19 @@ public class PyramidOMETiffWriter extends OMETiffWriter {
 
   // -- IFormatWriter API methods --
 
+  protected IFD makeIFD() throws FormatException, IOException {
+    IFD ifd = super.makeIFD();
+    if (getResolution() > 0) {
+      ifd.put(IFD.NEW_SUBFILE_TYPE, 1);
+    }
+    else {
+      if (!ifd.containsKey(IFD.SUB_IFD)) {
+        ifd.put(IFD.SUB_IFD, (long) 0);
+      }
+    }
+    return ifd;
+  }
+
   @Override
   public void saveBytes(int no, byte[] buf, IFD ifd, int x, int y, int w, int h)
     throws FormatException, IOException
@@ -118,7 +131,6 @@ public class PyramidOMETiffWriter extends OMETiffWriter {
       }
 
       int mainIFDIndex = 0;
-      int currentFullResolution = 0;
       for (int i=0; i<r.getImageCount(); i++) {
         setSeries(i);
         int resCount = resCounts[i];
@@ -142,11 +154,10 @@ public class PyramidOMETiffWriter extends OMETiffWriter {
             long nextPointer = index < allOffsets.length ? allOffsets[index] : 0;
 
             saver.overwriteIFDOffset(in, allOffsets[mainIFDIndex], nextPointer);
-            saver.overwriteIFDValue(in, currentFullResolution, IFD.SUB_IFD, subIFDOffsets);
+            saver.overwriteIFDValue(in, allOffsets[mainIFDIndex], IFD.SUB_IFD, subIFDOffsets, true);
           }
 
           mainIFDIndex++;
-          currentFullResolution++;
         }
         mainIFDIndex += (planeCounts[i] * (resCount - 1));
       }
