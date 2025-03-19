@@ -48,6 +48,7 @@ import java.util.TreeMap;
 import java.util.List;
 import static java.lang.Integer.max;
 
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -1063,7 +1064,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kChannelRecordFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kChannelRecordFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 int theLastIndex = 0;
                 StrIntPair thePair;
@@ -1147,7 +1154,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kMaskRecordFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kMaskRecordFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 int theLastIndex = 0;
                 List<NodeTuple> theValueClassList = theNode.getValue();
@@ -1216,7 +1229,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kAnnotationRecordFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kAnnotationRecordFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 int theLastIndex = 0;
                 CDataTableHeaderRecord70 theDataTableHeaderRecord70 = new CDataTableHeaderRecord70();
@@ -1291,7 +1310,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kElapsedTimesFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kElapsedTimesFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 ScalarNode theKeyNode;
                 Node theCurrentNode;
@@ -1315,7 +1340,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kSAPositionDataFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kSAPositionDataFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 ScalarNode theKeyNode;
                 Node theCurrentNode;
@@ -1350,7 +1381,13 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kStagePositionDataFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kStagePositionDataFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 ScalarNode theKeyNode;
                 Node theCurrentNode;
@@ -1388,7 +1425,14 @@ public class SlideBook7Reader  extends FormatReader {
         {
             try (InputStream inputStream = new FileInputStream(mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kAuxDataFilename);
                 Reader inputStreamReader = new InputStreamReader(inputStream);) {
-                Yaml yaml = new Yaml();
+                // making sure that the yaml code limit is big enough for this file
+                String thePath = mFile.GetImageGroupDirectory(mImageTitle) + CSBFile70.kAuxDataFilename;
+                File fil = new File(thePath);
+                long length = fil.length();
+                LoaderOptions loadingConfig = new LoaderOptions();
+                loadingConfig.setCodePointLimit((int)length + 10000);
+                Yaml yaml = new Yaml(loadingConfig);
+                //Yaml yaml = new Yaml();
                 MappingNode theNode = (MappingNode)yaml.compose(inputStreamReader);
                 ScalarNode theKeyNode;
                 Node theCurrentNode;
@@ -3048,7 +3092,7 @@ public class SlideBook7Reader  extends FormatReader {
 
 									// set exposure time
 									int expTime = theCurrentImageGroup.GetExposureTime(channel);
-									store.setPlaneExposureTime(new Time(Double.valueOf(expTime), UNITS.MILLISECOND), capture, imageIndex);
+									store.setPlaneExposureTime(new Time(new Double(expTime), UNITS.MILLISECOND), capture, imageIndex);
 
 									// set tile xy position
 									double numberX = theCurrentImageGroup.GetXPosition( position);
