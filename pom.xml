@@ -57,7 +57,7 @@
     <ome-codecs.version>1.1.0</ome-codecs.version>
     <jxrlib.version>0.2.4</jxrlib.version>
     <xalan.version>2.7.3</xalan.version>
-    <sqlite.version>3.28.0</sqlite.version>
+    <sqlite.version>3.49.1.0</sqlite.version>
 
     <!-- Maven plugin versions -->
     <maven-javadoc-plugin.version>3.0.1</maven-javadoc-plugin.version>
