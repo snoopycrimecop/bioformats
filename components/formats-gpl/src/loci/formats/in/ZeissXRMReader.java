@@ -333,6 +333,7 @@ public class ZeissXRMReader extends FormatReader {
       Length physicalSize = FormatTools.getPhysicalSize(pixelSize, "µm");
       store.setPixelsPhysicalSizeX(physicalSize, 0);
       store.setPixelsPhysicalSizeY(physicalSize, 0);
+      store.setPixelsPhysicalSizeZ(physicalSize, 0);
     }
 
     double firstTimestamp = 0;
