@@ -508,7 +508,7 @@ public class TissueFAXSReader extends FormatReader {
       }
 
       if (region.correctionImageCoreIndex != null) {
-        int corrImage = nextImage;
+        int corrImage = hasFlattenedResolutions() ? region.correctionImageCoreIndex : nextImage;
         nextImage++;
 
         store.setImageName(region.regionMetadata.getString("Name") + " Correction Image", corrImage);
