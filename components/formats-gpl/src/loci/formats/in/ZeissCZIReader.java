@@ -1661,18 +1661,19 @@ public class ZeissCZIReader extends FormatReader {
 
       for (int c=0; c<getEffectiveSizeC(); c++) {
         if (c < channels.size()) {
+          Channel thisChannel = channels.get(c);
           if (isPALM && i < channels.size()) {
             store.setChannelName(channels.get(i).name, i, c);
           }
           else {
-            store.setChannelName(channels.get(c).name, i, c);
+            store.setChannelName(thisChannel.name, i, c);
           }
-          store.setChannelFluor(channels.get(c).fluor, i, c);
-          if (channels.get(c).filterSetRef != null) {
-            store.setChannelFilterSetRef(channels.get(c).filterSetRef, i, c);
+          store.setChannelFluor(thisChannel.fluor, i, c);
+          if (thisChannel.filterSetRef != null) {
+            store.setChannelFilterSetRef(thisChannel.filterSetRef, i, c);
           }
 
-          String color = channels.get(c).color;
+          String color = thisChannel.color;
           if (color != null && !isRGB()) {
             color = normalizeColor(color);
             try {
@@ -1685,7 +1686,7 @@ public class ZeissCZIReader extends FormatReader {
             }
           }
 
-          String emWave = channels.get(c).emission;
+          String emWave = thisChannel.emission;
           if (emWave != null) {
             Double wave = Double.parseDouble(emWave);
             Length em = FormatTools.getEmissionWavelength(wave);
@@ -1693,7 +1694,7 @@ public class ZeissCZIReader extends FormatReader {
               store.setChannelEmissionWavelength(em, i, c);
             }
           }
-          String exWave = channels.get(c).excitation;
+          String exWave = thisChannel.excitation;
           if (exWave != null) {
             Double wave = Double.parseDouble(exWave);
             Length ex = FormatTools.getExcitationWavelength(wave);
@@ -1702,19 +1703,27 @@ public class ZeissCZIReader extends FormatReader {
             }
           }
 
-          if (channels.get(c).illumination != null) {
-            store.setChannelIlluminationType(
-              channels.get(c).illumination, i, c);
+          if (thisChannel.illumination != null) {
+            store.setChannelIlluminationType(thisChannel.illumination, i, c);
           }
 
-          if (channels.get(c).pinhole != null) {
+          if (thisChannel.pinhole != null) {
             store.setChannelPinholeSize(
-              new Length(Double.parseDouble(channels.get(c).pinhole), UNITS.MICROMETER), i, c);
+              new Length(Double.parseDouble(thisChannel.pinhole), UNITS.MICROMETER), i, c);
           }
 
-          if (channels.get(c).acquisitionMode != null) {
-            store.setChannelAcquisitionMode(
-              channels.get(c).acquisitionMode, i, c);
+          if (thisChannel.acquisitionMode != null) {
+            store.setChannelAcquisitionMode(thisChannel.acquisitionMode, i, c);
+          }
+          if (thisChannel.lightSourceRef != null) {
+            store.setChannelLightSourceSettingsID(thisChannel.lightSourceRef, i, c);
+            if (thisChannel.intensity != null) {
+              // value is stored as a percentage, e.g. "50 %"
+              // needs to be converted to a percent fraction, e.g. 0.5
+              Double attenuation = DataTools.parseDouble(thisChannel.intensity.replaceAll("[ %]", ""));
+              attenuation /= 100.0;
+              store.setChannelLightSourceSettingsAttenuation(new PercentFraction(attenuation.floatValue()), i, c);
+            }
           }
         }
 
@@ -2407,6 +2416,7 @@ public class ZeissCZIReader extends FormatReader {
           channels.get(i).pinhole = getFirstNodeValue(channel, "PinholeSize");
 
           channels.get(i).name = channel.getAttribute("Name");
+          channels.get(i).intensity = getFirstNodeValue(channel, "Intensity");
 
           String illumination = getFirstNodeValue(channel, "IlluminationType");
           if (illumination != null) {
@@ -2445,6 +2455,11 @@ public class ZeissCZIReader extends FormatReader {
           Element filterSet = getFirstNode(channel, "FilterSetRef");
           if (filterSet != null) {
             channels.get(i).filterSetRef = filterSet.getAttribute("Id");
+          }
+
+          Element lightSource = getFirstNode(channel, "LightSource");
+          if (lightSource != null) {
+            channels.get(i).lightSourceRef = lightSource.getAttribute("Id");
           }
         }
       }
@@ -2505,9 +2520,45 @@ public class ZeissCZIReader extends FormatReader {
             getFirstNodeValue(manufacturerNode, "SerialNumber");
           String lotNumber = getFirstNodeValue(manufacturerNode, "LotNumber");
 
-          String type = getFirstNodeValue(lightSource, "LightSourceType");
+          Element typeNode = getFirstNode(lightSource, "LightSourceType");
+          String type = null;
+          if (typeNode.hasChildNodes()) {
+            NodeList typeChildren = typeNode.getChildNodes();
+            for (int tc=0; tc<typeChildren.getLength(); tc++) {
+              Node n = typeChildren.item(tc);
+              if (n.getNodeType() != Node.TEXT_NODE) {
+                type = n.getNodeName();
+                break;
+              }
+            }
+          }
+          else {
+            type = typeNode.getTextContent();
+          }
+          String name = lightSource.getAttribute("Name");
+
+          // this should at least set a light source with an ID and Model
+          // even if no other information is present
+          // this matters for being able to link to a Channel
+          if (type == null && model == null) {
+            model = name;
+            if (model.startsWith("LED")) {
+              type = "LightEmittingDiode";
+            }
+            else {
+              type = "Laser";
+              LOGGER.warn("Unknown light source name '{}'; assuming Laser", model);
+            }
+          }
+
+          String lightSourceID = lightSource.getAttribute("Id");
+          if (lightSourceID == null) {
+            lightSourceID = MetadataTools.createLSID(type, 0, i);
+          }
+
           String power = getFirstNodeValue(lightSource, "Power");
           if ("Laser".equals(type)) {
+            store.setLaserID(lightSourceID, 0, i);
             if (power != null) {
               store.setLaserPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2517,6 +2568,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setLaserSerialNumber(serialNumber, 0, i);
           }
           else if ("Arc".equals(type)) {
+            store.setArcID(lightSourceID, 0, i);
             if (power != null) {
               store.setArcPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2526,6 +2578,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setArcSerialNumber(serialNumber, 0, i);
           }
           else if ("LightEmittingDiode".equals(type)) {
+            store.setLightEmittingDiodeID(lightSourceID, 0, i);
             if (power != null) {
               store.setLightEmittingDiodePower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2535,6 +2588,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setLightEmittingDiodeSerialNumber(serialNumber, 0, i);
           }
           else if ("Filament".equals(type)) {
+            store.setFilamentID(lightSourceID, 0, i);
             if (power != null) {
               store.setFilamentPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -4605,6 +4659,8 @@ public class ZeissCZIReader extends FormatReader {
     public Double gain;
     public String fluor;
     public String filterSetRef;
+    public String intensity;
+    public String lightSourceRef;
   }
 
   static class Coordinate {
