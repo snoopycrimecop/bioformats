@@ -131,7 +131,11 @@ public class DCIMGReader extends FormatReader {
 
       // DCIMG is stored column major
       int byteFactor = FormatTools.getBytesPerPixel(getPixelType());
-      stream.seek(headerSize + dataOffset + tp*bytesPerImage + byteFactor*y*getSizeX());
+      if (version >= DCIMG_VERSION_1) {
+        stream.seek(headerSize + dataOffset + tp*(bytesPerImage+frameFooterSize) + byteFactor*y*getSizeX());
+      } else {
+        stream.seek(headerSize + dataOffset + tp*bytesPerImage + byteFactor*y*getSizeX());
+      }
       for (int row=h-1; row>=0; row--) {
         if (fourPixelCorrectionInFooter && (row == fourPixelCorrectionLine) && (x < 4)) {
 
