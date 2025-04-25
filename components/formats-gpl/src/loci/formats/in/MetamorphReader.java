@@ -2046,8 +2046,20 @@ public class MetamorphReader extends BaseTiffReader {
     return intFormat(day, 2) + "/" + intFormat(month, 2) + "/" + year;
   }
 
-  /** Converts a time value in milliseconds into a human-readable string. */
+  /**
+   * Converts a time value in milliseconds into a human-readable string.
+   * Note that the date and time are handled separately, so this method
+   * is only concerned with the time of day. The time of day in milliseconds
+   * is stored as a 32-bit int in Metamorph files, but is expected to be
+   * a positive integer less than the number of milliseconds in one day.
+   *
+   * @param millis milliseconds elapsed in the relevant day
+   * @see decodeDate(int)
+   */
   public static String decodeTime(int millis) {
+    if (millis < 0 || millis > 1000 * 60 * 60 * 24) {
+      LOGGER.warn("Unexpected milliseconds when parsing relative time: {}", millis);
+    }
     DateTime tm = new DateTime(millis, DateTimeZone.UTC);
     String hours = intFormat(tm.getHourOfDay(), 2);
     String minutes = intFormat(tm.getMinuteOfHour(), 2);
