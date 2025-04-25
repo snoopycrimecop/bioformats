@@ -353,7 +353,11 @@ public class ScanrReader extends FormatReader {
     for (String file : list) {
       Location f = new Location(dir, file);
       if (checkSuffix(file, METADATA_SUFFIXES) && !f.isDirectory()) {
-        metadataFiles.add(f.getAbsolutePath());
+        if (f.getName().equals(XML_FILE)) {
+          metadataFiles.add(0, f.getAbsolutePath());
+        } else {
+          metadataFiles.add(f.getAbsolutePath());
+        }
       }
     }
 
