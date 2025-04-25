@@ -1873,7 +1873,6 @@ public class FormatReaderTest {
           !(reader.getFormat().equals("Micro-Manager")) &&
           !(reader.getFormat().equals("BDV")) &&
           !(reader.getFormat().equals("Zeiss AxioVision TIFF")) &&
-          !(reader.getFormat().equals("Olympus ScanR")) &&
           !base[0].equals(file)) {
           success = false;
           msg = "Used files list does not start with getCurrentFile";
