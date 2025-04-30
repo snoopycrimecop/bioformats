@@ -127,6 +127,7 @@ public class LIFReader extends FormatReader {
 
   /** Offsets to memory blocks, paired with their corresponding description. */
   private List<Long> offsets;
+  private transient List<String> offsetBlockIDs;
 
   private int[][] realChannel;
   private int lastChannel = 0;
@@ -400,7 +401,7 @@ public class LIFReader extends FormatReader {
     else {
       posInFile = dataOffset + no * planeSize;
     }
-    
+
     // seek instead of skipBytes to prevent dangerous int cast
     in.seek(posInFile);
   }
@@ -443,6 +444,7 @@ public class LIFReader extends FormatReader {
     super.close(fileOnly);
     if (!fileOnly) {
       offsets = null;
+      offsetBlockIDs = null;
       realChannel = null;
       lastChannel = 0;
       lutNames.clear();
@@ -496,6 +498,7 @@ public class LIFReader extends FormatReader {
     in = new RandomAccessInputStream(id);
     in.setEncoding(ENCODING);
     offsets = new ArrayList<Long>();
+    offsetBlockIDs = new ArrayList<String>();
 
     in.order(true);
 
@@ -559,7 +562,10 @@ public class LIFReader extends FormatReader {
       int descrLength = in.readInt() * 2;
 
       if (blockLength > 0) {
-        offsets.add(in.getFilePointer() + descrLength);
+        String memBlockID = DataTools.stripString(in.readString(descrLength));
+        offsets.add(in.getFilePointer());
+        offsetBlockIDs.add(memBlockID);
+        descrLength = 0;
       }
 
       in.seek(in.getFilePointer() + descrLength + blockLength);
@@ -1162,12 +1168,11 @@ public class LIFReader extends FormatReader {
 
     List<Element> imageNodes = new ArrayList<Element>();
     Long[] oldOffsets = null;
-    if (images.getLength() > offsets.size()) {
+    if (images.getLength() != offsets.size()) {
       oldOffsets = offsets.toArray(new Long[offsets.size()]);
       offsets.clear();
     }
 
-    int nextOffset = 0;
     for (int i=0; i<images.getLength(); i++) {
       Element image = (Element) images.item(i);
       Element grandparent = (Element) image.getParentNode();
@@ -1178,21 +1183,20 @@ public class LIFReader extends FormatReader {
       if (grandparent == null) {
         continue;
       }
+
+      NodeList checkForMemBlocks = grandparent.getChildNodes();
+      String memBlockID = null;
+      for (int q=0; q<checkForMemBlocks.getLength(); q++) {
+        Element m = (Element) checkForMemBlocks.item(q);
+        if ("Memory".equals(m.getNodeName())) {
+          memBlockID = m.getAttribute("MemoryBlockID");
+        }
+      }
       if (!"ProcessingHistory".equals(grandparent.getNodeName())) {
         // image is being referenced from an event list
         imageNodes.add(image);
-        if (oldOffsets != null && nextOffset < oldOffsets.length) {
-          offsets.add(oldOffsets[nextOffset]);
-        }
-      }
-      grandparent = (Element) grandparent.getParentNode();
-      if (grandparent == null) {
-        continue;
-      }
-      grandparent = (Element) grandparent.getParentNode();
-      if (grandparent != null) {
-        if (!"Image".equals(grandparent.getNodeName())) {
-          nextOffset++;
+        if (oldOffsets != null && offsetBlockIDs.contains(memBlockID)) {
+          offsets.add(oldOffsets[offsetBlockIDs.indexOf(memBlockID)]);
         }
       }
     }
