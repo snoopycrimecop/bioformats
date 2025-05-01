@@ -1187,9 +1187,11 @@ public class LIFReader extends FormatReader {
       NodeList checkForMemBlocks = grandparent.getChildNodes();
       String memBlockID = null;
       for (int q=0; q<checkForMemBlocks.getLength(); q++) {
-        Element m = (Element) checkForMemBlocks.item(q);
-        if ("Memory".equals(m.getNodeName())) {
-          memBlockID = m.getAttribute("MemoryBlockID");
+        if (checkForMemBlocks.item(q) instanceof Element) {
+          Element m = (Element) checkForMemBlocks.item(q);
+          if ("Memory".equals(m.getNodeName())) {
+            memBlockID = m.getAttribute("MemoryBlockID");
+          }
         }
       }
       if (!"ProcessingHistory".equals(grandparent.getNodeName())) {
