@@ -228,7 +228,7 @@ public class ZeissXRMReader extends FormatReader {
         }
         else if (name.equals(IMAGE_INFO_PATH + "PixelSize")) {
           pixelSize = (double) stream.readFloat();
-          addGlobalMeta(IMAGE_DETAILS + "Pixel size (µm)", pixelSize);
+          addGlobalMeta(IMAGE_DETAILS + "Pixel size (µm)", formatDouble(pixelSize));
         }
         else if (name.equals(IMAGE_INFO_PATH + "AcquisitionMode")) {
           int mode = stream.readInt();
@@ -254,7 +254,7 @@ public class ZeissXRMReader extends FormatReader {
         }
         else if (name.equals(IMAGE_INFO_PATH + "XrayVoltage") && voltage == null) {
           voltage = readAsDoubles(stream);
-          addMetadataList(voltage, paramsPrefix + "X-ray voltage (kV)");
+          addMetadataList(voltage, paramsPrefix + "X-ray voltage (kV)", !isTXM);
         }
         else if (name.equals(IMAGE_INFO_PATH + "SourceFilterName")) {
           String sourceFilter = readAsString(stream);
@@ -280,7 +280,7 @@ public class ZeissXRMReader extends FormatReader {
         else if (name.equals(IMAGE_INFO_PATH + "ExpTimes")) {
           exposureTimes = readAsDoubles(stream);
           if (exposureTimes.length > 1) {
-            addGlobalMeta(paramsPrefix + "Exposure time (s)", exposureTimes[0]);
+            addGlobalMeta(paramsPrefix + "Exposure time (s)", formatDouble(exposureTimes[0]));
           }
         }
         else if (name.equals(IMAGE_INFO_PATH + "CameraBinning")) {
@@ -315,15 +315,18 @@ public class ZeissXRMReader extends FormatReader {
     else if (isTXRM) {
       if (current != null && voltage != null) {
         for (int i=0; i<(int) Math.min(current.length, voltage.length); i++) {
-          addGlobalMetaList(PROJECTION + "X-ray power (W)", (current[i] * voltage[i]) / 1000);
+          double calcPower = (current[i] * voltage[i]) / 1000;
+          addGlobalMetaList(PROJECTION + "X-ray power (W)", formatDouble(calcPower));
         }
       }
     }
     addGlobalMeta(IMAGE_DETAILS + "File type", suffix);
 
     if (pixelSize != null) {
+      double fovX = m.sizeX * pixelSize;
+      double fovY = m.sizeY * pixelSize;
       addGlobalMeta(IMAGE_DETAILS + "Field of view (µm)",
-        (m.sizeX * pixelSize) + ", " + (m.sizeY * pixelSize));
+        formatDouble(fovX) + ", " + formatDouble(fovY));
     }
 
     MetadataStore store = makeFilterMetadata();
@@ -366,13 +369,13 @@ public class ZeissXRMReader extends FormatReader {
   /** Parse metadata fields specific to .txm files. */
   private void handleTXMMetadata(String name, RandomAccessInputStream stream) throws IOException {
     if (name.equals(AUTORECON_PATH + "MeanSampleX")) {
-      addGlobalMeta(POSITIONS + "Mean sample X (µm)", stream.readFloat());
+      addGlobalMeta(POSITIONS + "Mean sample X (µm)", formatDouble(stream.readFloat()));
     }
     else if (name.equals(AUTORECON_PATH + "MeanSampleY")) {
-      addGlobalMeta(POSITIONS + "Mean sample Y (µm)", stream.readFloat());
+      addGlobalMeta(POSITIONS + "Mean sample Y (µm)", formatDouble(stream.readFloat()));
     }
     else if (name.equals(AUTORECON_PATH + "MeanSampleZ")) {
-      addGlobalMeta(POSITIONS + "Mean sample Z (µm)", stream.readFloat());
+      addGlobalMeta(POSITIONS + "Mean sample Z (µm)", formatDouble(stream.readFloat()));
     }
     else if (name.equals(RECON_SETTINGS_PATH + "SourceVoltage")) {
       voltage = readAsDoubles(stream);
@@ -457,14 +460,14 @@ public class ZeissXRMReader extends FormatReader {
       // dividing by -1000 is intentional, this matches what DataExplorer shows
       float sRADistance = stream.readFloat() / -1000;
 
-      addGlobalMeta(POSITIONS + "Source to RA (mm)", sRADistance);
-      addGlobalMeta(GENERAL_PARAMS + "Source-RA (mm)", sRADistance);
+      addGlobalMeta(POSITIONS + "Source to RA (mm)", formatDouble(sRADistance));
+      addGlobalMeta(GENERAL_PARAMS + "Source-RA (mm)", formatDouble(sRADistance));
     }
     else if (name.equals(AUTORECON_PATH + "DtoRADistance")) {
       float dRADistance = stream.readFloat() / 1000;
 
-      addGlobalMeta(POSITIONS + "Detector to RA (mm)", dRADistance);
-      addGlobalMeta(GENERAL_PARAMS + "Detector-RA (mm)", dRADistance);
+      addGlobalMeta(POSITIONS + "Detector to RA (mm)", formatDouble(dRADistance));
+      addGlobalMeta(GENERAL_PARAMS + "Detector-RA (mm)", formatDouble(dRADistance));
     }
     else if (name.equals(AUTORECON_PATH + "NumOfProjects")) {
       addGlobalMeta(GENERAL_PARAMS + "Number of projections used", stream.readInt());
@@ -477,14 +480,14 @@ public class ZeissXRMReader extends FormatReader {
   /** Parse metadata fields specific to .txrm files. */
   private void handleTXRMMetadata(String name, RandomAccessInputStream stream) throws IOException {
     if (name.equals(REFERENCE_PATH + "ImageInfo/XrayMagnification")) {
-      addGlobalMeta(PROJECTION + "Geometric Magnification", stream.readFloat());
+      addGlobalMeta(PROJECTION + "Geometric Magnification", formatDouble(stream.readFloat()));
     }
     else if (name.equals("Root Entry/Selection/SelectedImages")) {
       addGlobalMeta(PROJECTION + "Selected", getYesNo(stream));
     }
     else if (name.equals(IMAGE_INFO_PATH + "XrayCurrent")) {
       current = readAsDoubles(stream);
-      addMetadataList(current, PROJECTION + "X-ray current (µA)");
+      addMetadataList(current, PROJECTION + "X-ray current (µA)", true);
     }
     else if (name.equals(IMAGE_INFO_PATH + "XPosition")) {
       xPos = readAsDoubles(stream);
@@ -496,22 +499,22 @@ public class ZeissXRMReader extends FormatReader {
       zPos = readAsDoubles(stream);
     }
     else if (name.equals(IMAGE_INFO_PATH + "DtoRADistance")) {
-      addGlobalMeta(PROJECTION + "Detector-RA (mm)", stream.readFloat());
+      addGlobalMeta(PROJECTION + "Detector-RA (mm)", formatDouble(stream.readFloat()));
     }
     else if (name.equals(IMAGE_INFO_PATH + "StoRADistance")) {
-      addGlobalMeta(PROJECTION + "Source-RA (mm)", stream.readFloat());
+      addGlobalMeta(PROJECTION + "Source-RA (mm)", formatDouble(stream.readFloat()));
     }
     else if (name.equals(IMAGE_INFO_PATH + "FanAngle")) {
       double[] fanAngle = readAsDoubles(stream);
-      addMetadataList(fanAngle, PROJECTION + "Fan angle");
+      addMetadataList(fanAngle, PROJECTION + "Fan angle", true);
     }
     else if (name.equals(IMAGE_INFO_PATH + "ConeAngle")) {
       double[] coneAngle = readAsDoubles(stream);
-      addMetadataList(coneAngle, PROJECTION + "Cone angle");
+      addMetadataList(coneAngle, PROJECTION + "Cone angle", true);
     }
     else if (name.equals(IMAGE_INFO_PATH + "Angles")) {
       double[] angles = readAsDoubles(stream);
-      addMetadataList(angles, PROJECTION + "Angle");
+      addMetadataList(angles, PROJECTION + "Angle", true);
     }
     else if (name.equals(IMAGE_INFO_PATH + "ReadOutTime")) {
       addGlobalMeta(PROJECTION + "Camera Readout Speed", stream.readInt());
@@ -610,7 +613,20 @@ public class ZeissXRMReader extends FormatReader {
     return v;
   }
 
+  /**
+   * Add each double value in an array to the original metadata table,
+   * using the given key. Double values are not formatted.
+   */
   private void addMetadataList(double[] v, String key) {
+    addMetadataList(v, key, false);
+  }
+
+  /**
+   * Add each double value in an array to the original metadata table,
+   * using the given key. Double values are formatted to 2 decimal places
+   * if the formatDoubles parameter is true.
+   */
+  private void addMetadataList(double[] v, String key, boolean formatDoubles) {
     boolean singleValue = true;
     for (double d : v) {
       if (Math.abs(d - v[0]) > Constants.EPSILON) {
@@ -619,13 +635,18 @@ public class ZeissXRMReader extends FormatReader {
       }
     }
     if (singleValue) {
-      addGlobalMeta(key, v[0]);
+      addGlobalMeta(key, formatDoubles ? formatDouble(v[0]) : v[0]);
     }
     else {
       for (double d : v) {
-        addGlobalMetaList(key, d);
+        addGlobalMetaList(key, formatDoubles ? formatDouble(d) : d);
       }
     }
+  }
+
+  /** Format double value to 2 decimal places, rounding to nearest. */
+  private String formatDouble(double v) {
+    return String.format("%.02f", v);
   }
 
 }
