@@ -2529,18 +2529,20 @@ public class ZeissCZIReader extends FormatReader {
 
           Element typeNode = getFirstNode(lightSource, "LightSourceType");
           String type = null;
-          if (typeNode.hasChildNodes()) {
-            NodeList typeChildren = typeNode.getChildNodes();
-            for (int tc=0; tc<typeChildren.getLength(); tc++) {
-              Node n = typeChildren.item(tc);
-              if (n.getNodeType() != Node.TEXT_NODE) {
-                type = n.getNodeName();
-                break;
+          if (typeNode != null) {
+            if (typeNode.hasChildNodes()) {
+              NodeList typeChildren = typeNode.getChildNodes();
+              for (int tc=0; tc<typeChildren.getLength(); tc++) {
+                Node n = typeChildren.item(tc);
+                if (n.getNodeType() != Node.TEXT_NODE) {
+                  type = n.getNodeName();
+                  break;
+                }
               }
             }
-          }
-          else {
-            type = typeNode.getTextContent();
+            else {
+              type = typeNode.getTextContent();
+            }
           }
           String name = lightSource.getAttribute("Name");
 
