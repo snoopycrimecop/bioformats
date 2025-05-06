@@ -561,14 +561,13 @@ public class LIFReader extends FormatReader {
 
       int descrLength = in.readInt() * 2;
 
+      String memBlockID = DataTools.stripString(in.readString(descrLength));
       if (blockLength > 0) {
-        String memBlockID = DataTools.stripString(in.readString(descrLength));
         offsets.add(in.getFilePointer());
         offsetBlockIDs.add(memBlockID);
-        descrLength = 0;
       }
 
-      in.seek(in.getFilePointer() + descrLength + blockLength);
+      in.seek(in.getFilePointer() + blockLength);
     }
     initMetadata(xml);
     xml = null;
