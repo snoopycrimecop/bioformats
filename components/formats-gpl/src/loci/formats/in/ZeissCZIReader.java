@@ -1721,14 +1721,16 @@ public class ZeissCZIReader extends FormatReader {
               // value is stored as a percentage, e.g. "50 %"
               // needs to be converted to a percent fraction, e.g. 0.5
               Double attenuation = DataTools.parseDouble(thisChannel.intensity.replaceAll("[ %]", ""));
-              attenuation /= 100.0;
-              attenuation = 1 - attenuation;
-              if (attenuation - 0 > Constants.EPSILON && 1 - attenuation > Constants.EPSILON) {
-                store.setChannelLightSourceSettingsAttenuation(new PercentFraction(attenuation.floatValue()), i, c);
-              }
-              else {
-                LOGGER.warn("Could not store intensity '{}' in LightSourceSettings.Attenuation",
-                  thisChannel.intensity);
+              if (attenuation != null) {
+                attenuation /= 100.0;
+                attenuation = 1 - attenuation;
+                if (attenuation - 0 > Constants.EPSILON && 1 - attenuation > Constants.EPSILON) {
+                  store.setChannelLightSourceSettingsAttenuation(new PercentFraction(attenuation.floatValue()), i, c);
+                }
+                else {
+                  LOGGER.warn("Could not store intensity '{}' in LightSourceSettings.Attenuation",
+                    thisChannel.intensity);
+                }
               }
             }
           }
