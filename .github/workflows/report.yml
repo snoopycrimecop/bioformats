@@ -2,8 +2,7 @@
 ---
 name: Report
 
-on: 
-  push:
+on:
   schedule:
     - cron: '0 5 * * *'
 
