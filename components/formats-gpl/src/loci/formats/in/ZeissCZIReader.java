@@ -162,6 +162,7 @@ public class ZeissCZIReader extends FormatReader {
   private ArrayList<String> detectorRefs = new ArrayList<String>();
   private ArrayList<Double> timestamps = new ArrayList<Double>();
   private transient ArrayList<String> gains = new ArrayList<String>();
+  private transient HashMap<String, String> lightSourceIDs = new HashMap<String, String>();
 
   private Length[] positionsX;
   private Length[] positionsY;
@@ -559,6 +560,7 @@ public class ZeissCZIReader extends FormatReader {
       detectorRefs.clear();
       timestamps.clear();
       gains.clear();
+      lightSourceIDs.clear();
 
       previousChannel = 0;
       prestitched = null;
@@ -1715,8 +1717,10 @@ public class ZeissCZIReader extends FormatReader {
           if (thisChannel.acquisitionMode != null) {
             store.setChannelAcquisitionMode(thisChannel.acquisitionMode, i, c);
           }
-          if (thisChannel.lightSourceRef != null) {
-            store.setChannelLightSourceSettingsID(thisChannel.lightSourceRef, i, c);
+          if (thisChannel.lightSourceRef != null &&
+            lightSourceIDs.containsKey(thisChannel.lightSourceRef))
+          {
+            store.setChannelLightSourceSettingsID(lightSourceIDs.get(thisChannel.lightSourceRef), i, c);
             if (thisChannel.intensity != null) {
               // value is stored as a percentage, e.g. "50 %"
               // needs to be converted to a percent fraction, e.g. 0.5
@@ -2563,13 +2567,14 @@ public class ZeissCZIReader extends FormatReader {
           }
 
           String lightSourceID = lightSource.getAttribute("Id");
-          if (lightSourceID == null) {
-            lightSourceID = MetadataTools.createLSID(type, 0, i);
+          String realID = MetadataTools.createLSID("LightSource", 0, i);
+          if (lightSourceID != null) {
+            lightSourceIDs.put(lightSourceID, realID);
           }
 
           String power = getFirstNodeValue(lightSource, "Power");
           if ("Laser".equals(type)) {
-            store.setLaserID(lightSourceID, 0, i);
+            store.setLaserID(realID, 0, i);
             if (power != null) {
               store.setLaserPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2579,7 +2584,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setLaserSerialNumber(serialNumber, 0, i);
           }
           else if ("Arc".equals(type)) {
-            store.setArcID(lightSourceID, 0, i);
+            store.setArcID(realID, 0, i);
             if (power != null) {
               store.setArcPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2589,7 +2594,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setArcSerialNumber(serialNumber, 0, i);
           }
           else if ("LightEmittingDiode".equals(type)) {
-            store.setLightEmittingDiodeID(lightSourceID, 0, i);
+            store.setLightEmittingDiodeID(realID, 0, i);
             if (power != null) {
               store.setLightEmittingDiodePower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2599,7 +2604,7 @@ public class ZeissCZIReader extends FormatReader {
             store.setLightEmittingDiodeSerialNumber(serialNumber, 0, i);
           }
           else if ("Filament".equals(type)) {
-            store.setFilamentID(lightSourceID, 0, i);
+            store.setFilamentID(realID, 0, i);
             if (power != null) {
               store.setFilamentPower(new Power(Double.parseDouble(power), UNITS.MILLIWATT), 0, i);
             }
@@ -2607,6 +2612,11 @@ public class ZeissCZIReader extends FormatReader {
             store.setFilamentManufacturer(manufacturer, 0, i);
             store.setFilamentModel(model, 0, i);
             store.setFilamentSerialNumber(serialNumber, 0, i);
+          }
+          else {
+            // if the type is missing or unsupported,
+            // don't record that the ID was used
+            lightSourceIDs.remove(lightSourceID);
           }
         }
       }
