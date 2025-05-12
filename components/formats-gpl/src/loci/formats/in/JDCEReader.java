@@ -40,7 +40,7 @@ import loci.formats.FormatException;
 import loci.formats.FormatReader;
 import loci.formats.FormatTools;
 import loci.formats.MetadataTools;
-import loci.formats.WellContainer;
+import loci.formats.internal.WellContainer;
 import loci.formats.meta.MetadataStore;
 
 import ome.units.UNITS;

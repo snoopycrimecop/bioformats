@@ -30,11 +30,12 @@
  * #L%
  */
 
-package loci.formats;
+package loci.formats.internal;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import loci.formats.MetadataTools;
 import loci.formats.meta.MetadataStore;
 import ome.xml.model.primitives.NonNegativeInteger;
 
