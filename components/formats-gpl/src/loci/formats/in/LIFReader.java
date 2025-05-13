@@ -126,8 +126,7 @@ public class LIFReader extends FormatReader {
   // -- Fields --
 
   /** Offsets to memory blocks, paired with their corresponding description. */
-  private List<Long> offsets;
-  private transient List<String> offsetBlockIDs;
+  private List<MemoryBlock> offsets;
 
   private int[][] realChannel;
   private int lastChannel = 0;
@@ -328,13 +327,13 @@ public class LIFReader extends FormatReader {
       return buf;
     }
 
-    long offset = offsets.get(index).longValue();
+    long offset = offsets.get(index).fileOffset;
     int bytes = FormatTools.getBytesPerPixel(getPixelType());
     int bpp = bytes * getRGBChannelCount();
 
     long planeSize = (long) getSizeX() * getSizeY() * bpp;
     long nextOffset = index + 1 < offsets.size() ?
-      offsets.get(index + 1).longValue() : endPointer;
+      offsets.get(index + 1).fileOffset : endPointer;
     long bytesToSkip = nextOffset - offset - planeSize * getImageCount();
     bytesToSkip /= getSizeY();
     if ((getSizeX() % 4) == 0) bytesToSkip = 0;
@@ -444,7 +443,6 @@ public class LIFReader extends FormatReader {
     super.close(fileOnly);
     if (!fileOnly) {
       offsets = null;
-      offsetBlockIDs = null;
       realChannel = null;
       lastChannel = 0;
       lutNames.clear();
@@ -497,8 +495,7 @@ public class LIFReader extends FormatReader {
     super.initFile(id);
     in = new RandomAccessInputStream(id);
     in.setEncoding(ENCODING);
-    offsets = new ArrayList<Long>();
-    offsetBlockIDs = new ArrayList<String>();
+    offsets = new ArrayList<MemoryBlock>();
 
     in.order(true);
 
@@ -563,8 +560,7 @@ public class LIFReader extends FormatReader {
 
       String memBlockID = DataTools.stripString(in.readString(descrLength));
       if (blockLength > 0) {
-        offsets.add(in.getFilePointer());
-        offsetBlockIDs.add(memBlockID);
+        offsets.add(new MemoryBlock(in.getFilePointer(), memBlockID));
       }
 
       in.seek(in.getFilePointer() + blockLength);
@@ -580,12 +576,12 @@ public class LIFReader extends FormatReader {
     if (offsets.size() > getSeriesCount()) {
       LOGGER.debug("Adjusting image offsets; found {} expected {}",
         offsets.size(), getSeriesCount());
-      Long[] storedOffsets = offsets.toArray(new Long[offsets.size()]);
+      MemoryBlock[] storedOffsets = offsets.toArray(new MemoryBlock[offsets.size()]);
       for (int i=0; i<storedOffsets.length; i++) {
         LOGGER.debug("original offset #{} = {}", i, storedOffsets[i]);
         LOGGER.debug("  bytes available = {}",
-          i == storedOffsets.length - 1 ? in.length() - storedOffsets[i] :
-          storedOffsets[i + 1] - storedOffsets[i]);
+          i == storedOffsets.length - 1 ? in.length() - storedOffsets[i].fileOffset :
+          storedOffsets[i + 1].fileOffset - storedOffsets[i].fileOffset);
       }
 
       offsets.clear();
@@ -596,17 +592,17 @@ public class LIFReader extends FormatReader {
         long tileBytes = (long) FormatTools.getPlaneSize(this) * getImageCount();
         int currentTileCount = tileCount[tileCountIndex];
         long nBytes = tileBytes * currentTileCount;
-        long start = storedOffsets[index];
+        long start = storedOffsets[index].fileOffset;
         long end = index == storedOffsets.length - 1 ? in.length() :
-          storedOffsets[index + 1];
+          storedOffsets[index + 1].fileOffset;
         LOGGER.debug("Series {} needs {} bytes", i, nBytes);
         LOGGER.debug("  index = {}", index);
         LOGGER.debug("  start = {}, end = {}, total = {}", start, end, end - start);
         while (end - start < nBytes && ((end - start) / nBytes) != 1 && index < storedOffsets.length - 1) {
           index++;
-          start = storedOffsets[index];
+          start = storedOffsets[index].fileOffset;
           end = index == storedOffsets.length - 1 ? in.length() :
-            storedOffsets[index + 1];
+            storedOffsets[index + 1].fileOffset;
           LOGGER.debug("  checking index = {}, start = {}, end = {}, total = {}",
             index, start, end, end - start);
         }
@@ -1166,9 +1162,9 @@ public class LIFReader extends FormatReader {
     }
 
     List<Element> imageNodes = new ArrayList<Element>();
-    Long[] oldOffsets = null;
+    MemoryBlock[] oldOffsets = null;
     if (images.getLength() != offsets.size()) {
-      oldOffsets = offsets.toArray(new Long[offsets.size()]);
+      oldOffsets = offsets.toArray(new MemoryBlock[offsets.size()]);
       offsets.clear();
     }
 
@@ -1196,8 +1192,13 @@ public class LIFReader extends FormatReader {
       if (!"ProcessingHistory".equals(grandparent.getNodeName())) {
         // image is being referenced from an event list
         imageNodes.add(image);
-        if (oldOffsets != null && offsetBlockIDs.contains(memBlockID)) {
-          offsets.add(oldOffsets[offsetBlockIDs.indexOf(memBlockID)]);
+        if (oldOffsets != null) {
+          for (MemoryBlock block : oldOffsets) {
+            if (memBlockID.equals(block.id)) {
+              offsets.add(block);
+              break;
+            }
+          }
         }
       }
     }
@@ -2635,6 +2636,16 @@ public class LIFReader extends FormatReader {
       count += tileCount[tile];
     }
     return -1;
+  }
+
+  class MemoryBlock {
+    public long fileOffset;
+    public String id;
+
+    public MemoryBlock(long offset, String blockID) {
+      id = blockID;
+      fileOffset = offset;
+    }
   }
 
 }
