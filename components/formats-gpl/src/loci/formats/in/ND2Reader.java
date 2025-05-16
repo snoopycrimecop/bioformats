@@ -322,23 +322,23 @@ public class ND2Reader extends SubResolutionFormatReader {
 
       long base = in.getFilePointer();
 
-      byte[] pix = new byte[destLength * h];
+      byte[] pix = new byte[destLength];
 
       long pre = (long) x * pixel;
 
       //scanlines
       for (int row=0; row<h; row++) {
         in.seek(base + (row + y)*scanline + pre);
-        long r = in.read(pix, row * destLength, destLength);
+        long r = in.read(pix, 0, destLength);
         if(r != destLength){
           LOGGER.warn("data line not fully read" + r + " of " + destLength);
         }
-
+        byte[] p2 = ImageTools.splitChannels(pix, lastChannel, getEffectiveSizeC(),
+                bpp, false, true);
+        System.arraycopy(p2, 0, buf, row*p2.length, p2.length);
+        
       }
-      pix = ImageTools.splitChannels(pix, lastChannel, getEffectiveSizeC(),
-        bpp, false, true);
 
-      System.arraycopy(pix, 0, buf, 0, buf.length);
     }
     else {
       // plane is not compressed
