@@ -25,6 +25,7 @@
 
 package loci.formats.in;
 
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -310,25 +311,34 @@ public class ND2Reader extends SubResolutionFormatReader {
       pix = null;
     }
     else if (split) {
-      // one padding pixel per row total, instead of one padding pixel
-      // per channel per row
-      int rowLength = getSizeX() * pixel + scanlinePad * bpp;
+      //pad to 4 byte boundaries.
+      long rowLength = getSizeX() * (long)pixel;
+      long mod = rowLength%4;
+      long pad = mod == 0 ? mod : 4 - mod;
+      long scanline = rowLength + pad;
+
       int destLength = w * pixel;
 
-      long skip = (long) rowLength * y;
-      in.seek(in.getFilePointer() + skip);
-      byte[] pix = new byte[destLength * h];
-      long pre = (long) x * pixel;
-      long post = (long) pixel * (getSizeX() - w - x) + (scanlinePad * bpp);
-      for (int row=0; row<h; row++) {
-        in.seek(in.getFilePointer() + pre);
-        in.read(pix, row * destLength, destLength);
-        in.seek(in.getFilePointer() + post);
-      }
 
+      long base = in.getFilePointer();
+
+      byte[] pix = new byte[destLength * h];
+
+      long pre = (long) x * pixel;
+
+      //scanlines
+      for (int row=0; row<h; row++) {
+        in.seek(base + (row + y)*scanline + pre);
+        long r = in.read(pix, row * destLength, destLength);
+        if(r != destLength){
+          LOGGER.warn("data line not fully read" + r + " of " + destLength);
+        }
+
+      }
       pix = ImageTools.splitChannels(pix, lastChannel, getEffectiveSizeC(),
         bpp, false, true);
-      System.arraycopy(pix, 0, buf, 0, pix.length);
+
+      System.arraycopy(pix, 0, buf, 0, buf.length);
     }
     else {
       // plane is not compressed
@@ -2837,5 +2847,4 @@ public class ND2Reader extends SubResolutionFormatReader {
     in = new RandomAccessInputStream(file);
     offsets = newOffsets;
   }
-
 }
