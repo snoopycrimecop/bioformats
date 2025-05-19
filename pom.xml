@@ -457,6 +457,11 @@
       <url>https://repo.maven.apache.org/maven2</url>
     </repository>
     <repository>
+      <id>scijava</id>
+      <name>SciJava</name>
+      <url>https://maven.scijava.org/content/groups/public/</url>
+    </repository>
+    <repository>
       <id>ome</id>
       <name>OME Artifactory</name>
       <url>https://artifacts.openmicroscopy.org/artifactory/maven/</url>
