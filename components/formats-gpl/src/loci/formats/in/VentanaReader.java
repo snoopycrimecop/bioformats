@@ -573,6 +573,7 @@ public class VentanaReader extends BaseTiffReader {
       // then average the UP values and apply to all tiles
 
       HashMap<Integer, Integer> columnYAdjust = new HashMap<Integer, Integer>();
+      HashMap<Integer, Integer> columnXAdjust = new HashMap<Integer, Integer>();
       double rightSum = 0.0;
       double upSum = 0.0;
       int rightCount = 0;
@@ -594,11 +595,10 @@ public class VentanaReader extends BaseTiffReader {
           upCount++;
         }
         else if (overlap.direction.equals("LEFT")) {
-          rightSum += overlap.x;
-          rightCount++;
+          int tileColumn = getTileColumn(overlap.a, area.tileRows, area.tileColumns);
+          columnXAdjust.put(tileColumn, overlap.x);
           if (overlap.y <= 0) {
-            columnYAdjust.put(getTileColumn(
-              overlap.a, area.tileRows, area.tileColumns), overlap.y);
+            columnYAdjust.put(tileColumn, overlap.y);
           }
         }
         else {
@@ -645,9 +645,16 @@ public class VentanaReader extends BaseTiffReader {
       }
 
       for (int row=0; row<area.tileRows; row++) {
+        int leftColAdjust = 0;
         for (int col=0; col<area.tileColumns; col++) {
           int index = (tileRow + row) * tileCols + (tileCol + col);
           tiles[index].realX -= (rightSum * col);
+
+          tiles[index].realX -= leftColAdjust;
+          if (columnXAdjust.containsKey(col)) {
+            leftColAdjust += columnXAdjust.get(col);
+          }
+
           tiles[index].realY -= (upSum * row);
           if (columnYAdjust.containsKey(col)) {
             tiles[index].realY += columnYAdjust.get(col);
