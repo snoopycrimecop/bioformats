@@ -405,8 +405,12 @@ public class ZeissCZIReader extends FormatReader {
         {
           int res = (int) Math.pow(scaleFactor, plane.resolutionIndex);
 
-          int realX = plane.x / res;
-          int realY = plane.y / res;
+          // The physical extent (i.e. the number of pixels) for the respective sub-block is unambiguously given
+          //  by the "storedSize" of the respective dimension-entry. Note that this may differ from dividing the
+          //  logical extent by the scale-factor, e.g. due to rounding errors (since we are dealing here with integers
+          //  only).
+          int realX = plane.getPhysicalWidth();
+          int realY = plane.getPhysicalHeight();
 
           if ((prestitched != null && prestitched) || validScanDim) {
             Region tile = new Region(plane.col, plane.row, realX, realY);
@@ -4218,6 +4222,26 @@ public class ZeissCZIReader extends FormatReader {
         return buf;
       }
       return data;
+    }
+
+    public int getPhysicalWidth() throws FormatException {
+      for (DimensionEntry entry : this.directoryEntry.dimensionEntries) {
+        if ("X".equals(entry.dimension)) {
+          return entry.storedSize;
+        }
+      }
+
+      throw new FormatException("DimensionEntry for 'X' not found");
+    }
+
+    public int getPhysicalHeight() throws FormatException {
+      for (DimensionEntry entry : this.directoryEntry.dimensionEntries) {
+        if ("Y".equals(entry.dimension)) {
+          return entry.storedSize;
+        }
+      }
+
+      throw new FormatException("DimensionEntry for 'Y' not found");
     }
 
     // -- Helper methods --
