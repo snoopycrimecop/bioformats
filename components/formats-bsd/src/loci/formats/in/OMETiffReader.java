@@ -467,14 +467,18 @@ public class OMETiffReader extends SubResolutionFormatReader {
   @Override
   public int getOptimalTileWidth() {
     FormatTools.assertId(currentId, true, 1);
-    return ((OMETiffCoreMetadata) getCurrentCore()).tileWidth;
+    // tile width might be 0 if an Image was defined with no linked IFDs
+    int tw = ((OMETiffCoreMetadata) getCurrentCore()).tileWidth;
+    return tw > 0 ? tw : super.getOptimalTileWidth();
   }
 
   /* @see loci.formats.SubResolutionFormatReader#getOptimalTileHeight() */
   @Override
   public int getOptimalTileHeight() {
     FormatTools.assertId(currentId, true, 1);
-    return ((OMETiffCoreMetadata) getCurrentCore()).tileHeight;
+    // tile height might be 0 if an Image was defined with no linked IFDs
+    int th = ((OMETiffCoreMetadata) getCurrentCore()).tileHeight;
+    return th > 0 ? th : super.getOptimalTileHeight();
   }
 
   // -- Internal FormatReader API methods --
