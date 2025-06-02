@@ -48,6 +48,7 @@ import loci.formats.FormatTools;
 import loci.formats.MetadataTools;
 import loci.formats.meta.MetadataStore;
 import loci.formats.tiff.IFD;
+import loci.formats.tiff.OnDemandLongArray;
 import loci.formats.tiff.PhotoInterp;
 import loci.formats.tiff.TiffIFDEntry;
 import loci.formats.tiff.TiffParser;
@@ -857,11 +858,22 @@ public class VentanaReader extends BaseTiffReader {
    * for the given plane. This is necessary because the tile count in the
    * real IFD is X * Y * Z.
    */
-  private IFD splitIFD(IFD ifd, int no) throws FormatException {
+  private IFD splitIFD(IFD ifd, int no) throws FormatException, IOException {
     IFD newIFD = new IFD();
     for (Integer tag : ifd.keySet()) {
       if (tag == IFD.TILE_BYTE_COUNTS || tag == IFD.TILE_OFFSETS) {
-        long[] array = ifd.getIFDLongArray(tag);
+        long[] array = null;
+        Object tagValue = ifd.get(tag);
+        if (tagValue instanceof OnDemandLongArray) {
+          OnDemandLongArray fileArray = (OnDemandLongArray) tagValue;
+          if (fileArray.getStream() == null) {
+            fileArray.setStream(in);
+          }
+          array = fileArray.toArray();
+        }
+        else {
+          array = ifd.getIFDLongArray(tag);
+        }
         int valuesPerPlane = array.length / getSizeZ();
         long[] newArray = new long[valuesPerPlane];
         System.arraycopy(array, no * valuesPerPlane, newArray, 0, valuesPerPlane);
