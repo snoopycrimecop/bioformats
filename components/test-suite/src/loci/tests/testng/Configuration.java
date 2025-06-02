@@ -657,8 +657,10 @@ public class Configuration {
         String flattenedName = retrieve.getImageName(index);
         seriesTable.put(NAME, flattenedName);
         String unflattenedName = unflattenedRetrieve.getImageName(series);
-        if ((flattenedName == null && unflattenedName != null) || !flattenedName.equals(unflattenedName)) {
-          seriesTable.put(UNFLATTENED_NAME, unflattenedName);
+        if (unflattenedName != null) {
+          if ((flattenedName == null) || !flattenedName.equals(unflattenedName)) {
+            seriesTable.put(UNFLATTENED_NAME, unflattenedName);
+          }
         }
         seriesTable.put(DESCRIPTION, retrieve.getImageDescription(index));
 
