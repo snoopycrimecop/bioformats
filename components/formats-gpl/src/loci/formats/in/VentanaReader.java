@@ -213,7 +213,7 @@ public class VentanaReader extends BaseTiffReader {
     Arrays.fill(buf, getFillColor());
     IFD ifd = ifds.get(getIFDIndex(getCoreIndex()));
 
-    if (no > 0) {
+    if (getSizeZ() > 1) {
       ifd = splitIFD(ifd, no);
     }
 
@@ -874,9 +874,23 @@ public class VentanaReader extends BaseTiffReader {
         else {
           array = ifd.getIFDLongArray(tag);
         }
+        // first plane in array is the middle of the stack
+        // next (n-1)/2 are the "near" planes
+        // remaining (n-1)/2 are the "far" planes
+        // reorder here to present in order from far to near
+        int realIndex = no;
+        int middlePlane = (getSizeZ() - 1) / 2;
+        if (realIndex > middlePlane) {
+          realIndex = getSizeZ() - (no - middlePlane);
+        }
+        else {
+          realIndex = middlePlane - no;
+        }
+        LOGGER.debug("reading plane #{} by copying offsets for #{}", no, realIndex);
+
         int valuesPerPlane = array.length / getSizeZ();
         long[] newArray = new long[valuesPerPlane];
-        System.arraycopy(array, no * valuesPerPlane, newArray, 0, valuesPerPlane);
+        System.arraycopy(array, realIndex * valuesPerPlane, newArray, 0, valuesPerPlane);
         newIFD.put(tag, newArray);
       }
       else if (tag != Z_TAG) {
