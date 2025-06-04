@@ -831,7 +831,9 @@ public class MetamorphReader extends BaseTiffReader {
       } else {
         rows = Collections.max(rowMap.values()) + 1;
         cols = Collections.max(colMap.values()) + 1;
-        if (rows > 0 && cols > 0) {
+        if (rows > 0 && cols > 0 &&
+          core.size() != uniqueWells.size())
+        {
           CoreMetadata c = core.get(0, 0);
           core.clear();
           c.sizeZ = 1;
