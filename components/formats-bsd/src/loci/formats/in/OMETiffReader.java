@@ -1110,8 +1110,16 @@ public class OMETiffReader extends SubResolutionFormatReader {
           if (info[s][0].id != null && failOnMissingTIFF()) {
             throw new FormatException("Invalid file (may be corrupted): " + info[s][0].id);
           }
-          LOGGER.warn("{} is not a valid OME-TIFF", info[s][0].id);
-          info[s][0].id = currentId;
+          // warning if the id is null (usually no linked data in Image)
+          // isn't helpful, and potentially confusing
+          if (info[s][0].id != null) {
+            LOGGER.warn("{} is not a valid OME-TIFF", info[s][0].id);
+          }
+          // only reset the id if the current file is a TIFF,
+          // not just a companion OME-XML
+          if (info[s][0].reader.isThisType(currentId)) {
+            info[s][0].id = currentId;
+          }
           info[s][0].exists = false;
           if (info[s][0].ifd < 0) {
             info[s][0].ifd = 0;
