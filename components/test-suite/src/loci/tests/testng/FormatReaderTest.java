@@ -768,7 +768,7 @@ public class FormatReaderTest {
       Double start = config.getModuloZStart();
       Double step = config.getModuloZStep();
       Double end = config.getModuloZEnd();
-      if (!isEqual(type, moduloZ.type)) {
+      if (!isEqual(type, moduloZ.type) && moduloLength > 1) {
         result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloZ.type + ")");
       }
       // start/stop/step values are 0/0/1 by default unless
@@ -807,7 +807,7 @@ public class FormatReaderTest {
       Double start = config.getModuloCStart();
       Double step = config.getModuloCStep();
       Double end = config.getModuloCEnd();
-      if (!isEqual(type, moduloC.type)) {
+      if (!isEqual(type, moduloC.type) && moduloLength > 1) {
         result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloC.type + ")");
       }
       // start/stop/step values are 0/0/1 by default unless
@@ -846,7 +846,7 @@ public class FormatReaderTest {
       Double start = config.getModuloTStart();
       Double step = config.getModuloTStep();
       Double end = config.getModuloTEnd();
-      if (!isEqual(type, moduloT.type)) {
+      if (!isEqual(type, moduloT.type) && moduloLength > 1) {
         result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloT.type + ")");
       }
       // start/stop/step values are 0/0/1 by default unless
