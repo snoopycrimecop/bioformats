@@ -1046,7 +1046,10 @@ public class FormatReaderTest {
     else if (d1 == null || d2 == null) {
       return false;
     }
-    return Math.abs(d1 - d2) < Constants.EPSILON;
+    else if (d1.isNaN() && d2.isNaN()) {
+      return true;
+    }
+    return Math.abs(d1 - d2) <= Constants.EPSILON;
   }
 
   private boolean isAlmostEqual(Quantity q1, Quantity q2) {
