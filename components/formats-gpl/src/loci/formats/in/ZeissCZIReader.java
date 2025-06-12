@@ -1720,8 +1720,9 @@ public class ZeissCZIReader extends FormatReader {
           if (thisChannel.lightSourceRef != null &&
             lightSourceIDs.containsKey(thisChannel.lightSourceRef))
           {
-            store.setChannelLightSourceSettingsID(lightSourceIDs.get(thisChannel.lightSourceRef), i, c);
             if (thisChannel.intensity != null) {
+              store.setChannelLightSourceSettingsID(lightSourceIDs.get(thisChannel.lightSourceRef), i, c);
+
               // value is stored as a percentage, e.g. "50 %"
               // needs to be converted to a percent fraction, e.g. 0.5
               Double attenuation = DataTools.parseDouble(thisChannel.intensity.replaceAll("[ %]", ""));
