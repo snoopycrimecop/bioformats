@@ -53,6 +53,7 @@ import loci.formats.FormatTools;
 import loci.formats.IFormatReader;
 import loci.formats.ImageReader;
 import loci.formats.Memoizer;
+import loci.formats.Modulo;
 import loci.formats.ReaderWrapper;
 import loci.formats.gui.AWTImageTools;
 import loci.formats.gui.BufferedImageReader;
@@ -760,6 +761,28 @@ public class FormatReaderTest {
       if (reader.getSizeZ() != config.getSizeZ()) {
         result(testName, false, "Series " + i + " (expected " + config.getSizeZ() + ", actual " + reader.getSizeZ() + ")");
       }
+
+      Modulo moduloZ = reader.getModuloZ();
+      int moduloLength = moduloZ.length();
+      String type = config.getModuloZType();
+      Double start = config.getModuloZStart();
+      Double step = config.getModuloZStep();
+      Double end = config.getModuloZEnd();
+      if (!isEqual(type, moduloZ.type) && moduloLength > 1) {
+        result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloZ.type + ")");
+      }
+      // start/stop/step values are 0/0/1 by default unless
+      // the reader set something else, which means a length of 1
+      // if corresponding config values are null, that's OK even though not strictly equal
+      if (!isAlmostEqual(start, moduloZ.start) && (moduloLength > 1 || start != null)) {
+        result(testName, false, "Series " + i + " (expected modulo start " + start + ", actual " + moduloZ.start + ")");
+      }
+      if (!isAlmostEqual(step, moduloZ.step) && (moduloLength > 1 || step != null)) {
+        result(testName, false, "Series " + i + " (expected modulo step " + step + ", actual " + moduloZ.step + ")");
+      }
+      if (!isAlmostEqual(end, moduloZ.end) && (moduloLength > 1 || end != null)) {
+        result(testName, false, "Series " + i + " (expected modulo end " + end + ", actual " + moduloZ.end + ")");
+      }
     }
     result(testName, true);
   }
@@ -777,6 +800,28 @@ public class FormatReaderTest {
       if (reader.getSizeC() != config.getSizeC()) {
         result(testName, false, "Series " + i + " (expected " + config.getSizeC() + ", actual " + reader.getSizeC() + ")");
       }
+
+      Modulo moduloC = reader.getModuloC();
+      int moduloLength = moduloC.length();
+      String type = config.getModuloCType();
+      Double start = config.getModuloCStart();
+      Double step = config.getModuloCStep();
+      Double end = config.getModuloCEnd();
+      if (!isEqual(type, moduloC.type) && moduloLength > 1) {
+        result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloC.type + ")");
+      }
+      // start/stop/step values are 0/0/1 by default unless
+      // the reader set something else, which means a length of 1
+      // if corresponding config values are null, that's OK even though not strictly equal
+      if (!isAlmostEqual(start, moduloC.start) && (moduloLength > 1 || start != null)) {
+        result(testName, false, "Series " + i + " (expected modulo start " + start + ", actual " + moduloC.start + ")");
+      }
+      if (!isAlmostEqual(step, moduloC.step) && (moduloLength > 1 || step != null)) {
+        result(testName, false, "Series " + i + " (expected modulo step " + step + ", actual " + moduloC.step + ")");
+      }
+      if (!isAlmostEqual(end, moduloC.end) && (moduloLength > 1 || end != null)) {
+        result(testName, false, "Series " + i + " (expected modulo end " + end + ", actual " + moduloC.end + ")");
+      }
     }
     result(testName, true);
   }
@@ -793,6 +838,28 @@ public class FormatReaderTest {
 
       if (reader.getSizeT() != config.getSizeT()) {
         result(testName, false, "Series " + i + " (expected " + config.getSizeT() + ", actual " + reader.getSizeT() + ")");
+      }
+
+      Modulo moduloT = reader.getModuloT();
+      int moduloLength = moduloT.length();
+      String type = config.getModuloTType();
+      Double start = config.getModuloTStart();
+      Double step = config.getModuloTStep();
+      Double end = config.getModuloTEnd();
+      if (!isEqual(type, moduloT.type) && moduloLength > 1) {
+        result(testName, false, "Series " + i + " (expected modulo type " + type + ", actual " + moduloT.type + ")");
+      }
+      // start/stop/step values are 0/0/1 by default unless
+      // the reader set something else, which means a length of 1
+      // if corresponding config values are null, that's OK even though not strictly equal
+      if (!isAlmostEqual(start, moduloT.start) && (moduloLength > 1 || start != null)) {
+        result(testName, false, "Series " + i + " (expected modulo start " + start + ", actual " + moduloT.start + ")");
+      }
+      if (!isAlmostEqual(step, moduloT.step) && (moduloLength > 1 || step != null)) {
+        result(testName, false, "Series " + i + " (expected modulo step " + step + ", actual " + moduloT.step + ")");
+      }
+      if (!isAlmostEqual(end, moduloT.end) && (moduloLength > 1 || end != null)) {
+        result(testName, false, "Series " + i + " (expected modulo end " + end + ", actual " + moduloT.end + ")");
       }
     }
     result(testName, true);
@@ -972,6 +1039,19 @@ public class FormatReaderTest {
     }
   }
 
+  private boolean isAlmostEqual(Double d1, Double d2) {
+    if (d1 == null && d2 == null) {
+      return true;
+    }
+    else if (d1 == null || d2 == null) {
+      return false;
+    }
+    else if (d1.isNaN() && d2.isNaN()) {
+      return true;
+    }
+    return Math.abs(d1 - d2) <= Constants.EPSILON;
+  }
+
   private boolean isAlmostEqual(Quantity q1, Quantity q2) {
     if (q1 == null && q2 == null) {
       return true;
@@ -979,12 +1059,8 @@ public class FormatReaderTest {
       return false;
     } else if (q1.unit() != q2.unit()) {
       return false;
-    } else if (Math.abs(q1.value().doubleValue() - q2.value().doubleValue()) > Constants.EPSILON) {
-
-      return false;
-    } else {
-      return true;
     }
+    return isAlmostEqual(q1.value().doubleValue(), q2.value().doubleValue());
   }
 
   @Test(groups = {"all", "fast", "automated"})
