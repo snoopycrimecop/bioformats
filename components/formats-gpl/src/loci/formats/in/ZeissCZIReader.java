@@ -1654,7 +1654,7 @@ public class ZeissCZIReader extends FormatReader {
             channels.get(channel).exposure != null)
           {
             store.setPlaneExposureTime(
-              new Time(channels.get(channel).exposure, UNITS.SECOND), i, plane);
+              new Time(channels.get(channel).exposure, UNITS.MILLISECOND), i, plane);
           }
         }
       }
