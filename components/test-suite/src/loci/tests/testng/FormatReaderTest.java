@@ -1163,10 +1163,12 @@ public class FormatReaderTest {
         }
         catch (NullPointerException e) { }
 
-        if (!(expectedLightSource == null && realLightSource == null) &&
-          !expectedLightSource.equals(realLightSource))
-        {
-          result(testName, false, "Series " + i + " channel " + c + " (expected " + expectedLightSource + ", actual " + realLightSource + ")");
+        if (expectedLightSource != null || realLightSource != null) {
+          if ((expectedLightSource != null && !expectedLightSource.equals(realLightSource)) ||
+            (realLightSource != null && !realLightSource.equals(expectedLightSource)))
+          {
+            result(testName, false, "Series " + i + " channel " + c + " (expected " + expectedLightSource + ", actual " + realLightSource + ")");
+          }
         }
       }
     }
