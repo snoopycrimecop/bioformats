@@ -159,10 +159,19 @@ public class ZeissCZIReader extends FormatReader {
 
   private ArrayList<Channel> channels = new ArrayList<Channel>();
   private ArrayList<String> binnings = new ArrayList<String>();
+
+  // the length of this list should match the channel count
+  // and represents which Detector ID should be linked to which Channel
+  // via a DetectorSettings
   private ArrayList<String> detectorRefs = new ArrayList<String>();
+
   private ArrayList<Double> timestamps = new ArrayList<Double>();
   private transient ArrayList<String> gains = new ArrayList<String>();
+
+  // these represent valid LightSource and Detector IDs
+  // which could be referenced by a Channel using the relevant *Settings
   private transient HashMap<String, String> lightSourceIDs = new HashMap<String, String>();
+  private transient ArrayList<String> detectorIDs = new ArrayList<String>();
 
   private Length[] positionsX;
   private Length[] positionsY;
@@ -565,6 +574,7 @@ public class ZeissCZIReader extends FormatReader {
       timestamps.clear();
       gains.clear();
       lightSourceIDs.clear();
+      detectorIDs.clear();
 
       previousChannel = 0;
       prestitched = null;
@@ -1747,13 +1757,15 @@ public class ZeissCZIReader extends FormatReader {
 
         if (c < detectorRefs.size()) {
           String detector = detectorRefs.get(c);
-          store.setDetectorSettingsID(detector, i, c);
+          if (detectorIDs.contains(detector)) {
+            store.setDetectorSettingsID(detector, i, c);
 
-          if (c < binnings.size()) {
-            store.setDetectorSettingsBinning(MetadataTools.getBinning(binnings.get(c)), i, c);
-          }
-          if (c < channels.size()) {
-            store.setDetectorSettingsGain(channels.get(c).gain, i, c);
+            if (c < binnings.size()) {
+              store.setDetectorSettingsBinning(MetadataTools.getBinning(binnings.get(c)), i, c);
+            }
+            if (c < channels.size()) {
+              store.setDetectorSettingsGain(channels.get(c).gain, i, c);
+            }
           }
         }
 
@@ -2653,6 +2665,7 @@ public class ZeissCZIReader extends FormatReader {
           uniqueDetectors.add(detectorID);
           int detectorIndex = uniqueDetectors.size() - 1;
 
+          detectorIDs.add(detectorID);
           store.setDetectorID(detectorID, 0, detectorIndex);
           store.setDetectorManufacturer(manufacturer, 0, detectorIndex);
           store.setDetectorModel(model, 0, detectorIndex);
@@ -2856,7 +2869,9 @@ public class ZeissCZIReader extends FormatReader {
             getFirstNodeValue(manufacturerNode, "SerialNumber");
           String lotNumber = getFirstNodeValue(manufacturerNode, "LotNumber");
 
-          store.setDichroicID(dichroic.getAttribute("Id"), 0, i);
+          String dichroicID = dichroic.getAttribute("Id");
+
+          store.setDichroicID("Dichroic:" + dichroicID, 0, i);
           store.setDichroicManufacturer(manufacturer, 0, i);
           store.setDichroicModel(model, 0, i);
           store.setDichroicSerialNumber(serialNumber, 0, i);
@@ -3555,6 +3570,7 @@ public class ZeissCZIReader extends FormatReader {
         Element detector = (Element) detectors.item(i);
         String id = MetadataTools.createLSID("Detector", 0, i);
 
+        detectorIDs.add(id);
         store.setDetectorID(id, 0, i);
         String model = detector.getAttribute("Id");
         store.setDetectorModel(model, 0, i);
