@@ -625,12 +625,18 @@ public class MetamorphTiffReader extends BaseTiffReader {
   }
 
   private void parseFile(String tiff, MetamorphHandler handler)
-    throws IOException
+    throws FormatException, IOException
   {
       try (RandomAccessInputStream s = new RandomAccessInputStream(tiff)) {
         TiffParser parser = new TiffParser(s);
         IFD firstIFD = parser.getFirstIFD();
+        if (firstIFD == null) {
+          throw new FormatException("Could not read IFD from " + tiff + "; possibly corrupt");
+        }
         String xml = XMLTools.sanitizeXML(firstIFD.getComment());
+        if (xml == null) {
+          throw new FormatException("No XML found in " + tiff + "; possibly corrupt");
+        }
         XMLTools.parseXML(xml, handler);
       }
   }
