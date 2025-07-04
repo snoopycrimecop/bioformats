@@ -2135,6 +2135,7 @@ public class ND2Reader extends SubResolutionFormatReader {
             value = resultString.toString();
 
             if (name.startsWith("TextInfoItem")) {
+              addGlobalMeta(name, value);
               textInfos.add((String) value);
             }
             break;
