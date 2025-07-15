@@ -38,6 +38,11 @@ import static ome.xml.model.Pixels.getPhysicalSizeXUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeYUnitXsdDefault;
 import static ome.xml.model.Pixels.getPhysicalSizeZUnitXsdDefault;
 
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,6 +69,7 @@ import loci.formats.FormatReader;
 import loci.formats.FormatTools;
 import loci.formats.MetadataTools;
 import loci.formats.ResourceNamer;
+import loci.formats.gui.AWTImageTools;
 import loci.formats.meta.MetadataStore;
 import loci.formats.ome.OMEXMLMetadata;
 import loci.formats.services.OMEXMLService;
@@ -223,6 +229,7 @@ public class FakeReader extends FormatReader {
   // Misc. debugging
   private int sleepOpenBytes = 0;
   private int sleepInitFile = 0;
+  private boolean labelPlanes = false;
 
   static void sleep(String msg, int ms) {
     if (ms <= 0) return; // EARLY EXIT
@@ -418,6 +425,70 @@ public class FakeReader extends FormatReader {
       }
     }
 
+    // if requested, add human-readable dimension and index data to the image
+    if (labelPlanes) {
+      final BufferedImage plane = AWTImageTools.openImage(buf, this, w, h);
+      final Graphics2D g = plane.createGraphics();
+
+      // build list of text lines from planar information
+      final ArrayList<TextLine> lines = new ArrayList<TextLine>();
+      final Font font = g.getFont();
+      lines.add(new TextLine(new Location(getCurrentFile()).getName(),
+        font.deriveFont(16f), 5, -5));
+      lines.add(new TextLine("Core index " + getCoreIndex(),
+        font.deriveFont(16f), 5, 5));
+      lines.add(new TextLine(getSizeX() + " x " + getSizeY(),
+        font.deriveFont(Font.ITALIC, 16f), 20, 10));
+      lines.add(new TextLine(getDimensionOrder(),
+        font.deriveFont(Font.ITALIC, 14f), 30, 5));
+      int space = 5;
+      if (getSizeZ() > 1) {
+        lines.add(new TextLine(
+          "Focal plane = " + (zIndex + 1) + "/" + getSizeZ(), font, 20, space));
+        space = 2;
+      }
+      if (getSizeC() > 1) {
+        lines.add(new TextLine("Channel = " + (cIndex + 1) + "/" + getSizeC(),
+          font, 20, space));
+        space = 2;
+      }
+      if (getSizeT() > 1) {
+        lines.add(new TextLine("Time point = " + (tIndex + 1) + "/" + getSizeT(),
+          font, 20, space));
+        space = 2;
+      }
+
+      // draw text lines to image
+      g.setColor(java.awt.Color.white);
+      int yoff = BOX_SIZE; // start drawing below special pixels
+      for (TextLine text : lines) {
+        g.setFont(text.font);
+        final Rectangle2D r =
+          g.getFont().getStringBounds(text.line, g.getFontRenderContext());
+        yoff += (int) r.getHeight() + text.ypad;
+        g.drawString(text.line, text.xoff, yoff);
+      }
+      g.dispose();
+
+      // unpack pixel bytes from BufferedImage
+      byte[][] pixelBytes = AWTImageTools.getPixelBytes(plane, little);
+      if (interleaved) {
+        for (int i=0; i<pixelBytes[0].length; i+=bpp) {
+          for (int j=0; j<pixelBytes.length; j++) {
+            System.arraycopy(pixelBytes[j], i, buf,
+              i * pixelBytes.length + j * bpp, bpp);
+          }
+        }
+      }
+      else {
+        for (int i=0; i<pixelBytes.length; i++) {
+          System.arraycopy(pixelBytes[i], 0, buf,
+            i * pixelBytes[0].length, pixelBytes[i].length);
+        }
+      }
+      pixelBytes = null;
+    }
+
     return buf;
   }
 
@@ -515,6 +586,7 @@ public class FakeReader extends FormatReader {
     plateCols = 0;
     fields = 0;
     plateAcqs = 0;
+    labelPlanes = false;
     excitationWavelengths.clear();
     emissionWavelengths.clear();
     super.close(fileOnly);
@@ -783,6 +855,8 @@ public class FakeReader extends FormatReader {
         sleepOpenBytes = intValue;
       } else if (key.equals("sleepInitFile")) {
         sleepInitFile = intValue;
+      } else if (key.equals("labelPlanes")) {
+        labelPlanes = boolValue;
       }
     }
 
@@ -1555,6 +1629,26 @@ public class FakeReader extends FormatReader {
       return null;
     }
     return wavelength;
+  }
+
+
+  // -- Helper classes --
+
+  private static class TextLine {
+
+    final String line;
+    final Font font;
+    final int xoff;
+    final int ypad;
+
+    TextLine(final String line, final Font font, final int xoff, final int ypad)
+    {
+      this.line = line;
+      this.font = font;
+      this.xoff = xoff;
+      this.ypad = ypad;
+    }
+
   }
 
 }
