@@ -55,7 +55,7 @@ import ome.units.quantity.Temperature;
 import ome.units.quantity.Time;
 import ome.units.UNITS;
 
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 
 /**
  * MetamorphTiffReader is the file format reader for TIFF files produced by

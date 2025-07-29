@@ -70,7 +70,7 @@ import ome.units.quantity.Time;
 import ome.units.UNITS;
 
 import org.xml.sax.SAXException;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
