@@ -35,13 +35,26 @@ package loci.formats;
 import java.io.IOException;
 
 import loci.common.DataTools;
+import loci.common.services.DependencyException;
+import loci.common.services.ServiceException;
+import loci.common.services.ServiceFactory;
 import loci.formats.codec.Codec;
 import loci.formats.codec.CodecOptions;
+import loci.formats.meta.MetadataRetrieve;
+import loci.formats.meta.MetadataStore;
+import loci.formats.ome.OMEXMLMetadata;
+import loci.formats.services.OMEXMLService;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Logic to automatically merge channels in a file.
  */
 public class ChannelMerger extends ReaderWrapper {
+
+  private static final Logger LOGGER =
+    LoggerFactory.getLogger(ChannelMerger.class);
 
   // -- Utility methods --
 
@@ -225,6 +238,34 @@ public class ChannelMerger extends ReaderWrapper {
   @Override
   public Class<?> getNativeDataType() {
     return byte[].class;
+  }
+
+  /* @see IFormatHandler#setId(String) */
+  @Override
+  public void setId(String id) throws FormatException, IOException {
+    super.setId(id);
+
+    MetadataStore store = getMetadataStore();
+    try {
+      OMEXMLService service =
+          new ServiceFactory().getInstance(OMEXMLService.class);
+
+      if (service.isOMEXMLMetadata(store)) {
+        OMEXMLMetadata omexml = service.getOMEMetadata((MetadataRetrieve) store);
+        for (int s=0; s<getSeriesCount(); s++) {
+          setSeries(s);
+          if (canMerge()) {
+            service.removeChannels(omexml, s, getEffectiveSizeC());
+          }
+        }
+      }
+    }
+    catch (DependencyException | ServiceException e) {
+      LOGGER.debug("Could not check for OMEXMLMetadata", e);
+    }
+    finally {
+      setSeries(0);
+    }
   }
 
 }
