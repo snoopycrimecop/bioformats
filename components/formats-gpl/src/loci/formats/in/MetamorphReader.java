@@ -120,6 +120,8 @@ public class MetamorphReader extends BaseTiffReader {
   private static final String NDINFOFILE_VER1 = "Version 1.0";
   private static final String NDINFOFILE_VER2 = "Version 2.0";
 
+  private static final String ND_ENCODING = "windows-1252";
+
   // -- Fields --
 
   /** The TIFF's name */
@@ -484,7 +486,7 @@ public class MetamorphReader extends BaseTiffReader {
       boolean useWaveNames = true;
 
       ndFilename = ndfile.getAbsolutePath();
-      String[] lines = DataTools.readFile(ndFilename).split("\n");
+      String[] lines = DataTools.readFile(ndFilename, ND_ENCODING).split("\n");
 
       boolean globalDoZ = true;
       boolean doTimelapse = false;
@@ -2279,7 +2281,7 @@ public class MetamorphReader extends BaseTiffReader {
    */
   private String getNDVersionSuffix(Location ndfile) throws IOException {
     ndFilename = ndfile.getAbsolutePath();
-    String[] lines = DataTools.readFile(ndFilename).split("\n");
+    String[] lines = DataTools.readFile(ndFilename, ND_ENCODING).split("\n");
     boolean globalDoZ = true;
     String version = NDINFOFILE_VER1;
     StringBuilder currentValue = new StringBuilder();
