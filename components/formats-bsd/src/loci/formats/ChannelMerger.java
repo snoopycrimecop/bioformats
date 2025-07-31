@@ -45,6 +45,8 @@ import loci.formats.meta.MetadataStore;
 import loci.formats.ome.OMEXMLMetadata;
 import loci.formats.services.OMEXMLService;
 
+import ome.xml.model.primitives.PositiveInteger;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -256,6 +258,8 @@ public class ChannelMerger extends ReaderWrapper {
           setSeries(s);
           if (canMerge()) {
             service.removeChannels(omexml, s, getEffectiveSizeC());
+            omexml.setChannelSamplesPerPixel(
+              new PositiveInteger(getRGBChannelCount()), s, 0);
           }
         }
       }
