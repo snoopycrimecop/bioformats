@@ -1603,19 +1603,6 @@ public class ND2Reader extends SubResolutionFormatReader {
         }
       }
 
-      if (core.size() == 1 && ((uniqueX == getSizeT() &&
-        uniqueY == getSizeT()) || uniqueZ == getSizeT()))
-      {
-        int count = getSizeT();
-        core.get(0, 0).imageCount /= count;
-        core.get(0, 0).sizeT = 1;
-
-        for (int i=1; i<count; i++) {
-          core.add(core.get(0, 0));
-        }
-        numSeries = core.size();
-      }
-
       // reset the series count if we're confident that the image count
       // covers all of the offsets; this prevents too much memory being used
       // when the offsets array is allocated
