@@ -71,6 +71,7 @@ import ome.specification.XMLMockObjects;
 import ome.xml.meta.OMEXMLMetadataRoot;
 import ome.xml.model.MapPair;
 import ome.xml.model.OME;
+import ome.xml.model.Instrument;
 import ome.xml.model.enums.EnumerationException;
 import ome.xml.model.enums.UnitsLength;
 import ome.xml.model.enums.handlers.UnitsLengthEnumHandler;
@@ -843,6 +844,7 @@ public class FakeReader extends FormatReader {
     }
 
     // populate SPW metadata
+    String instrumentID = null;
     MetadataStore store = makeFilterMetadata();
     boolean hasSPW = screens > 0 || plates > 0 || plateRows > 0 ||
       plateCols > 0 || fields > 0 || plateAcqs > 0;
@@ -856,10 +858,11 @@ public class FakeReader extends FormatReader {
       // generate SPW metadata and override series count to match
       int imageCount =
         populateSPW(store, screens, plates, plateRows, plateCols, fields, plateAcqs, withMicrobeam);
+      instrumentID = getOmeXmlMetadata().getInstrumentID​(0);
       if (imageCount > 0) seriesCount = imageCount;
       else hasSPW = false; // failed to generate SPW metadata
     } else if (withInstrument) {
-      populateInstrument(store);
+      instrumentID = populateInstrument(store);
     }
 
     // populate core metadata
@@ -906,6 +909,9 @@ public class FakeReader extends FormatReader {
     fillPhysicalSizes(store);
     fillChannelWavelengths(store);
     for (int currentImageIndex=0; currentImageIndex<seriesCount; currentImageIndex++) {
+      if (instrumentID != null) {
+        store.setImageInstrumentRef(instrumentID, currentImageIndex);
+      }
       if (currentImageIndex < seriesTables.size()) {
         parseSeriesTable(seriesTables.get(currentImageIndex), store, currentImageIndex);
       }
@@ -1428,13 +1434,15 @@ public class FakeReader extends FormatReader {
     return ome.sizeOfImageList();
   }
 
-  private void populateInstrument(MetadataStore store)
+  private String populateInstrument(MetadataStore store)
   {
     final XMLMockObjects xml = new XMLMockObjects();
     OME ome = xml.getRoot();
-    ome.addInstrument(xml.createInstrument(true));
+    Instrument instrument = xml.createInstrument(true);
+    ome.addInstrument(instrument);
     getOmeXmlMetadata().setRoot(new OMEXMLMetadataRoot(ome));
     getOmeXmlService().convertMetadata(omeXmlMetadata, store);
+    return instrument.getID();
   }
 
   /** Creates a mapping between indices and color values. */

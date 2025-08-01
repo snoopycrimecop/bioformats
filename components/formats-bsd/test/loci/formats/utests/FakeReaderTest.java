@@ -822,6 +822,28 @@ public class FakeReaderTest {
     m = service.asRetrieve(reader.getMetadataStore());
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     assertEquals(m.getInstrumentCount(), 1);
+    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
+    reader.close();
+
+    reader.setId("test&withInstrument=true&series=3.fake");
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    assertEquals(m.getImageCount(), 3);
+    assertEquals(m.getInstrumentCount(), 1);
+    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
+    assertEquals(m.getImageInstrumentRef(1), m.getInstrumentID(0));
+    assertEquals(m.getImageInstrumentRef(2), m.getInstrumentID(0));
+    reader.close();
+
+    reader.setId("test&plates=1&plateRows=2&plateCols=2.fake");
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    assertEquals(m.getImageCount(), 4);
+    assertEquals(m.getInstrumentCount(), 1);
+    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
+    assertEquals(m.getImageInstrumentRef(1), m.getInstrumentID(0));
+    assertEquals(m.getImageInstrumentRef(2), m.getInstrumentID(0));
+    assertEquals(m.getImageInstrumentRef(3), m.getInstrumentID(0));
     reader.close();
   }
 }
