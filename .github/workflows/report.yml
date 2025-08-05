@@ -21,9 +21,11 @@ jobs:
           start=$(grep -c "Batch .* started" ./build-status.log)
           end=$(grep -c "Batch .* finished" ./build-status.log)
           if [ "$start" != "$end" ]; then
+              echo "$start batches started but $end finished"
               exit 1
           fi 
-          output=$(grep "Tests failed in" ./build-status.log)
+          output=$(grep "Tests failed in" ./build-status.log || true)
           if [ -n "$output" ]; then
+            echo "Found failures in the build status"
             exit 1
           fi
