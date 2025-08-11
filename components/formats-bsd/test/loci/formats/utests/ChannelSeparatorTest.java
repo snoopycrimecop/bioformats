@@ -104,6 +104,60 @@ public class ChannelSeparatorTest {
   }
 
   @Test
+  public void testFourChannels() throws Exception {
+    reader.setId("4C&sizeC=4.fake");
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertEquals(m.getChannelCount(0), 4);
+    assertEquals(m.getChannelSamplesPerPixel(0, 0),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 1),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 2),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 3),
+      new PositiveInteger(1));
+  }
+
+  @Test
+  public void testFiveChannels() throws Exception {
+    reader.setId("5C&sizeC=5.fake");
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertEquals(m.getChannelCount(0), 5);
+    assertEquals(m.getChannelSamplesPerPixel(0, 0),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 1),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 2),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 3),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 4),
+      new PositiveInteger(1));
+  }
+
+  @Test
+  public void testSixChannels() throws Exception {
+    reader.setId("6C&sizeC=6.fake");
+    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
+    m = service.asRetrieve(reader.getMetadataStore());
+    assertEquals(m.getChannelCount(0), 6);
+    assertEquals(m.getChannelSamplesPerPixel(0, 0),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 1),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 2),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 3),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 4),
+      new PositiveInteger(1));
+    assertEquals(m.getChannelSamplesPerPixel(0, 5),
+      new PositiveInteger(1));
+  }
+
+  @Test
   public void testOneRGBChannel() throws Exception {
     reader.setId("rgb&sizeC=3&rgb=3.fake");
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
