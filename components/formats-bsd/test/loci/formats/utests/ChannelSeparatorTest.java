@@ -70,7 +70,6 @@ public class ChannelSeparatorTest {
   @Test
   public void testSingleChannel() throws Exception {
     reader.setId("1C&sizeC=1.fake");
-    reader.reopenFile();
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     m = service.asRetrieve(reader.getMetadataStore());
     assertEquals(m.getChannelCount(0), 1);
@@ -81,7 +80,6 @@ public class ChannelSeparatorTest {
   @Test
   public void testTwoChannels() throws Exception {
     reader.setId("2C&sizeC=2.fake");
-    reader.reopenFile();
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     m = service.asRetrieve(reader.getMetadataStore());
     assertEquals(m.getChannelCount(0), 2);
@@ -94,7 +92,6 @@ public class ChannelSeparatorTest {
   @Test
   public void testThreeChannels() throws Exception {
     reader.setId("3C&sizeC=3.fake");
-    reader.reopenFile();
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     m = service.asRetrieve(reader.getMetadataStore());
     assertEquals(m.getChannelCount(0), 3);
@@ -109,7 +106,6 @@ public class ChannelSeparatorTest {
   @Test
   public void testOneRGBChannel() throws Exception {
     reader.setId("rgb&sizeC=3&rgb=3.fake");
-    reader.reopenFile();
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     m = service.asRetrieve(reader.getMetadataStore());
     assertEquals(m.getChannelCount(0), 3);
@@ -124,7 +120,6 @@ public class ChannelSeparatorTest {
   @Test
   public void testTwoRGBChannels() throws Exception {
     reader.setId("rgb&sizeC=6&rgb=3.fake");
-    reader.reopenFile();
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
     m = service.asRetrieve(reader.getMetadataStore());
     assertEquals(m.getChannelCount(0), 6);
