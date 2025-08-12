@@ -816,34 +816,59 @@ public class FakeReaderTest {
     assertEquals(m.getChannelEmissionWavelength(1, 1), new Length(580.0, UNITS.NANOMETER));
   }
 
-  @Test
-  public void testInstrument() throws Exception {
-    reader.setId("test&withInstrument=true.fake");
-    m = service.asRetrieve(reader.getMetadataStore());
-    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
-    assertEquals(m.getInstrumentCount(), 1);
-    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
-    reader.close();
+  @DataProvider(name = "instruments")
+  public Object[][] intruments() {
+    return new Object[][] {
+      {"test&withInstrument=true.fake", 1, 1},
+      {"test&withInstrument=true&series=3.fake", 3, 1},
+      {"test&sizeC=5&withInstrument=true.fake", 1, 5},
+      {"test&plates=1&plateRows=2&plateCols=2.fake", 4, 1},
+      {"test&plates=1&plateRows=2&plateCols=2&sizeC=4.fake", 4, 4}
+    };
+  }
 
-    reader.setId("test&withInstrument=true&series=3.fake");
+  @Test(dataProvider = "intruments")
+  public void testInstrument(String id, int imageCount, int channelCount) throws Exception {
+    reader.setId(id);
     m = service.asRetrieve(reader.getMetadataStore());
     assertTrue(service.validateOMEXML(service.getOMEXML(m)));
-    assertEquals(m.getImageCount(), 3);
+    assertEquals(m.getDetectorCount(0), 1);
+    assertEquals(m.getDichroicCount(0), 1);
+    assertEquals(m.getFilterCount(0), 2);
+    assertEquals(m.getFilterSetCount(0), 1);
+    assertEquals(m.getImageCount(), imageCount);
     assertEquals(m.getInstrumentCount(), 1);
-    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
-    assertEquals(m.getImageInstrumentRef(1), m.getInstrumentID(0));
-    assertEquals(m.getImageInstrumentRef(2), m.getInstrumentID(0));
-    reader.close();
-
-    reader.setId("test&plates=1&plateRows=2&plateCols=2.fake");
-    m = service.asRetrieve(reader.getMetadataStore());
-    assertTrue(service.validateOMEXML(service.getOMEXML(m)));
-    assertEquals(m.getImageCount(), 4);
-    assertEquals(m.getInstrumentCount(), 1);
-    assertEquals(m.getImageInstrumentRef(0), m.getInstrumentID(0));
-    assertEquals(m.getImageInstrumentRef(1), m.getInstrumentID(0));
-    assertEquals(m.getImageInstrumentRef(2), m.getInstrumentID(0));
-    assertEquals(m.getImageInstrumentRef(3), m.getInstrumentID(0));
-    reader.close();
+    assertEquals(m.getLightSourceCount​(0), 5);
+    assertEquals(m.getObjectiveCount(0), 1);
+    for (int i=0; i<imageCount; i++) {
+      assertEquals(m.getImageInstrumentRef(i), m.getInstrumentID(0));
+      assertEquals(m.getObjectiveSettingsID​(i), m.getObjectiveID(0, 0));
+      for (int c=0; c<channelCount; c++) {
+        assertEquals(m.getChannelCount(i), channelCount);
+        assertEquals(m.getChannelFilterSetRef​(i, c), m.getFilterSetID(0, 0));
+        switch (c % 5) {
+          case 0:
+            assertEquals(m.getChannelLightSourceSettingsID​(i, c), m.getLaserID(0, 0));
+            break;
+          case 1:
+            assertEquals(m.getChannelLightSourceSettingsID​(i, c), m.getArcID(0, 1));
+            break;
+          case 2:
+            assertEquals(m.getChannelLightSourceSettingsID​(i, c), m.getFilamentID(0, 2));
+            break;
+          case 3:
+            assertEquals(m.getChannelLightSourceSettingsID​(i, c), m.getLightEmittingDiodeID(0, 3));
+            break;
+          case 4:
+            assertEquals(m.getChannelLightSourceSettingsID​(i, c), m.getLaserID(0, 4));
+            break;
+        }
+        assertEquals(m.getLightPathDichroicRef​(i, c), m.getDichroicID(0, 0));
+        assertEquals(m.getLightPathEmissionFilterRefCount​​​(i, c), 1);
+        assertEquals(m.getLightPathEmissionFilterRef​​(i, c, 0), m.getFilterID(0, 0));
+        assertEquals(m.getLightPathExcitationFilterRefCount​​​(i, c), 1);
+        assertEquals(m.getLightPathExcitationFilterRef​​​(i, c, 0), m.getFilterID(0, 1));
+      }
+    }
   }
 }

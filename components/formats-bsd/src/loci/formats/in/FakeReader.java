@@ -71,7 +71,6 @@ import ome.specification.XMLMockObjects;
 import ome.xml.meta.OMEXMLMetadataRoot;
 import ome.xml.model.MapPair;
 import ome.xml.model.OME;
-import ome.xml.model.Instrument;
 import ome.xml.model.enums.EnumerationException;
 import ome.xml.model.enums.UnitsLength;
 import ome.xml.model.enums.handlers.UnitsLengthEnumHandler;
@@ -844,7 +843,6 @@ public class FakeReader extends FormatReader {
     }
 
     // populate SPW metadata
-    String instrumentID = null;
     MetadataStore store = makeFilterMetadata();
     boolean hasSPW = screens > 0 || plates > 0 || plateRows > 0 ||
       plateCols > 0 || fields > 0 || plateAcqs > 0;
@@ -858,11 +856,10 @@ public class FakeReader extends FormatReader {
       // generate SPW metadata and override series count to match
       int imageCount =
         populateSPW(store, screens, plates, plateRows, plateCols, fields, plateAcqs, withMicrobeam);
-      instrumentID = getOmeXmlMetadata().getInstrumentID​(0);
       if (imageCount > 0) seriesCount = imageCount;
       else hasSPW = false; // failed to generate SPW metadata
     } else if (withInstrument) {
-      instrumentID = populateInstrument(store);
+      populateInstrument(store);
     }
 
     // populate core metadata
@@ -909,8 +906,8 @@ public class FakeReader extends FormatReader {
     fillPhysicalSizes(store);
     fillChannelWavelengths(store);
     for (int currentImageIndex=0; currentImageIndex<seriesCount; currentImageIndex++) {
-      if (instrumentID != null) {
-        store.setImageInstrumentRef(instrumentID, currentImageIndex);
+      if (hasSPW || withInstrument) {
+        fillInstrumentRefs(store);
       }
       if (currentImageIndex < seriesTables.size()) {
         parseSeriesTable(seriesTables.get(currentImageIndex), store, currentImageIndex);
@@ -1121,6 +1118,35 @@ public class FakeReader extends FormatReader {
       annotationXmlCount++;
       annotationCount++;
       annotationRefCount++;
+    }
+  }
+
+  private void fillInstrumentRefs(MetadataStore store) {
+    for (int s=0; s<getSeriesCount(); s++) {
+      String detectorID = getOmeXmlMetadata().getDetectorID(0, 0);
+      String dichroicID = getOmeXmlMetadata().getDichroicID(0, 0);
+      String emissionFilterID = getOmeXmlMetadata().getFilterID​(0, 0);
+      String excitationFilterID = getOmeXmlMetadata().getFilterID​(0, 1);
+      String filterSetID = getOmeXmlMetadata().getFilterSetID​(0, 0);
+      String instrumentID = getOmeXmlMetadata().getInstrumentID​(0);
+      String[] lightSourcesID = {
+        getOmeXmlMetadata().getLaserID(0, 0),
+        getOmeXmlMetadata().getArcID(0, 1),
+        getOmeXmlMetadata().getFilamentID(0, 2),
+        getOmeXmlMetadata().getLightEmittingDiodeID(0, 3),
+        getOmeXmlMetadata().getLaserID(0, 4)
+      };
+      String objectiveID = getOmeXmlMetadata().getObjectiveID​(0, 0);
+      store.setImageInstrumentRef(instrumentID, s);
+      store.setObjectiveSettingsID(objectiveID, s);
+      for (int c=0; c<getEffectiveSizeC(); c++) {
+        store.setChannelFilterSetRef​(filterSetID, s, c);
+        store.setChannelLightSourceSettingsID​(lightSourcesID[c % 5], s, c);
+        store.setDetectorSettingsID(detectorID, s, c);
+        store.setLightPathDichroicRef​(dichroicID, s, c);
+        store.setLightPathEmissionFilterRef(emissionFilterID, s, c, 0);
+        store.setLightPathExcitationFilterRef​(excitationFilterID, s, c, 0);
+      }
     }
   }
 
@@ -1434,15 +1460,13 @@ public class FakeReader extends FormatReader {
     return ome.sizeOfImageList();
   }
 
-  private String populateInstrument(MetadataStore store)
+  private void populateInstrument(MetadataStore store)
   {
     final XMLMockObjects xml = new XMLMockObjects();
     OME ome = xml.getRoot();
-    Instrument instrument = xml.createInstrument(true);
-    ome.addInstrument(instrument);
+    ome.addInstrument(xml.createInstrument(true));
     getOmeXmlMetadata().setRoot(new OMEXMLMetadataRoot(ome));
     getOmeXmlService().convertMetadata(omeXmlMetadata, store);
-    return instrument.getID();
   }
 
   /** Creates a mapping between indices and color values. */
