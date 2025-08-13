@@ -122,6 +122,7 @@ public class DicomReader extends SubResolutionFormatReader {
   private int originalSeries;
   private int originalX, originalY;
   private String originalSpecimen;
+  private String originalStudyTime;
 
   private List<String> companionFiles = new ArrayList<String>();
 
@@ -453,6 +454,7 @@ public class DicomReader extends SubResolutionFormatReader {
       date = time = imageType = null;
       originalDate = originalTime = originalInstance = null;
       originalSpecimen = null;
+      originalStudyTime = null;
       instanceUID = null;
       originalSeries = 0;
       originalX = 0;
@@ -1189,6 +1191,9 @@ public class DicomReader extends SubResolutionFormatReader {
           case ACQUISITION_TIME:
             originalTime = infoString;
             break;
+          case STUDY_TIME:
+            originalStudyTime = infoString;
+            break;
           case SOP_INSTANCE_UID:
             instanceUID = infoString;
             break;
@@ -1413,6 +1418,7 @@ public class DicomReader extends SubResolutionFormatReader {
     String thisSpecimen = null;
 
     String date = null, time = null, instance = null;
+    String studyTime = null;
     String thisInstanceUID = null;
     try (RandomAccessInputStream stream = new RandomAccessInputStream(file)) {
       if (!isThisType(stream)) {
@@ -1469,6 +1475,9 @@ public class DicomReader extends SubResolutionFormatReader {
           case ACQUISITION_DATE:
             date = tag.getStringValue();
             break;
+          case STUDY_TIME:
+            studyTime = tag.getStringValue();
+            break;
           case SERIES_NUMBER:
             fileSeries = parseIntValue(tag.getNumberValue(), 0);
             break;
@@ -1501,6 +1510,7 @@ public class DicomReader extends SubResolutionFormatReader {
     LOGGER.debug("  currentX = {}, originalX = {}", currentX, originalX);
     LOGGER.debug("  currentY = {}, originalY = {}", currentY, originalY);
     LOGGER.debug("  thisSpecimen = {}, originalSpecimen = {}", thisSpecimen, originalSpecimen);
+    LOGGER.debug("  studyTime = {}, originalStudyTime = {}", studyTime, originalStudyTime);
 
     boolean noSpecimens = originalSpecimen == null && thisSpecimen == null;
     boolean oneNullSpecimen = originalSpecimen == null || thisSpecimen == null;
@@ -1543,7 +1553,17 @@ public class DicomReader extends SubResolutionFormatReader {
     LOGGER.trace("  stamp = {}", stamp);
     LOGGER.trace("  timestamp = {}", timestamp);
 
-    if (date.equals(originalDate) && (Math.abs(stamp - timestamp) < 150000000)) {
+    double timeDifference = Math.abs(stamp - timestamp);
+    LOGGER.trace("  time difference (microsecs) = {}", timeDifference);
+    LOGGER.trace("  time difference (minutes) = {}", timeDifference / (1000 * 1000 * 60));
+
+    // time difference may legitimately be longer than 150 seconds,
+    // especially when comparing resolutions of a whole slide image
+    // in that case compare the study times as well, which are expected to be
+    // consistent across files
+    if (date.equals(originalDate) &&
+      (studyTime.equals(originalStudyTime) || (timeDifference < 150000000)))
+    {
       int position = Integer.parseInt(instance) - 1;
       if (position < 0) position = 0;
       if (fileList.get(fileSeries) == null) {
