@@ -123,6 +123,7 @@ public class DicomReader extends SubResolutionFormatReader {
   private int originalX, originalY;
   private String originalSpecimen;
   private String originalStudyTime;
+  private boolean wsi = false;
 
   private List<String> companionFiles = new ArrayList<String>();
 
@@ -455,6 +456,7 @@ public class DicomReader extends SubResolutionFormatReader {
       originalDate = originalTime = originalInstance = null;
       originalSpecimen = null;
       originalStudyTime = null;
+      wsi = false;
       instanceUID = null;
       originalSeries = 0;
       originalX = 0;
@@ -625,6 +627,7 @@ public class DicomReader extends SubResolutionFormatReader {
               m.sizeZ = 1;
             }
           }
+          wsi = true;
           break;
         case TOTAL_PIXEL_MATRIX_ROWS:
           int my = tag.getNumberValue().intValue();
@@ -1562,7 +1565,7 @@ public class DicomReader extends SubResolutionFormatReader {
     // in that case compare the study times as well, which are expected to be
     // consistent across files
     if (date.equals(originalDate) &&
-      (studyTime.equals(originalStudyTime) || (timeDifference < 150000000)))
+      ((wsi && studyTime.equals(originalStudyTime)) || (timeDifference < 150000000)))
     {
       int position = Integer.parseInt(instance) - 1;
       if (position < 0) position = 0;
