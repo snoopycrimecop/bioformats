@@ -906,6 +906,9 @@ public class FakeReader extends FormatReader {
     fillPhysicalSizes(store);
     fillChannelWavelengths(store);
     for (int currentImageIndex=0; currentImageIndex<seriesCount; currentImageIndex++) {
+      if (hasSPW || withInstrument) {
+        fillInstrumentRefs(store);
+      }
       if (currentImageIndex < seriesTables.size()) {
         parseSeriesTable(seriesTables.get(currentImageIndex), store, currentImageIndex);
       }
@@ -1115,6 +1118,35 @@ public class FakeReader extends FormatReader {
       annotationXmlCount++;
       annotationCount++;
       annotationRefCount++;
+    }
+  }
+
+  private void fillInstrumentRefs(MetadataStore store) {
+    for (int s=0; s<getSeriesCount(); s++) {
+      String detectorID = getOmeXmlMetadata().getDetectorID(0, 0);
+      String dichroicID = getOmeXmlMetadata().getDichroicID(0, 0);
+      String emissionFilterID = getOmeXmlMetadata().getFilterID​(0, 0);
+      String excitationFilterID = getOmeXmlMetadata().getFilterID​(0, 1);
+      String filterSetID = getOmeXmlMetadata().getFilterSetID​(0, 0);
+      String instrumentID = getOmeXmlMetadata().getInstrumentID​(0);
+      String[] lightSourcesID = {
+        getOmeXmlMetadata().getLaserID(0, 0),
+        getOmeXmlMetadata().getArcID(0, 1),
+        getOmeXmlMetadata().getFilamentID(0, 2),
+        getOmeXmlMetadata().getLightEmittingDiodeID(0, 3),
+        getOmeXmlMetadata().getLaserID(0, 4)
+      };
+      String objectiveID = getOmeXmlMetadata().getObjectiveID​(0, 0);
+      store.setImageInstrumentRef(instrumentID, s);
+      store.setObjectiveSettingsID(objectiveID, s);
+      for (int c=0; c<getEffectiveSizeC(); c++) {
+        store.setChannelFilterSetRef​(filterSetID, s, c);
+        store.setChannelLightSourceSettingsID​(lightSourcesID[c % 5], s, c);
+        store.setDetectorSettingsID(detectorID, s, c);
+        store.setLightPathDichroicRef​(dichroicID, s, c);
+        store.setLightPathEmissionFilterRef(emissionFilterID, s, c, 0);
+        store.setLightPathExcitationFilterRef​(excitationFilterID, s, c, 0);
+      }
     }
   }
 
