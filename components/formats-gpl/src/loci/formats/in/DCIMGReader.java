@@ -123,9 +123,12 @@ public class DCIMGReader extends FormatReader {
   {
     FormatTools.checkPlaneParameters(this, no, buf.length, x, y, w, h);
 
-    int zp = no % getSizeZ();
-    int tp = (no / getSizeZ()) % getSizeT();
+    int[] zct = getZCTCoords(no);
+    int zp = zct[0];
+    // int cp = zct[1];  
+    int tp = zct[2];
 
+  
     try (RandomAccessInputStream stream = new RandomAccessInputStream(uniqueFiles[zp])) {
       stream.order(IS_LITTLE);
 
