@@ -4,7 +4,7 @@ name: Report
 
 on:
   schedule:
-    - cron: '0 5-9 * * *'
+    - cron: '0 7-9 * * *'
 
 jobs:
   check:
