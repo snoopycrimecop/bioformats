@@ -2134,6 +2134,13 @@ public class FormatReaderTest {
             continue;
           }
 
+          // TissueFAXS can only be detected with .aqproj file
+          if (reader.getFormat().equals("TissueFAXS") &&
+            !base[i].toLowerCase().endsWith(".aqproj"))
+          {
+            continue;
+          }
+
           // Tecan datasets can only be detected with the .db file
           if (reader.getFormat().equals("Tecan Spark Cyto") &&
             !base[i].toLowerCase().endsWith(".db"))
@@ -2943,6 +2950,13 @@ public class FormatReaderTest {
             // MetaXpress TIFF reader can flag .HTD files from CellWorX
             if (result && r instanceof CellWorxReader &&
               readers[j] instanceof MetaxpressTiffReader)
+            {
+              continue;
+            }
+
+            // TissueFAXS data can only be detected with .aqproj
+            if (!result && readers[j] instanceof TissueFAXSReader &&
+              !used[i].toLowerCase().endsWith(".aqproj"))
             {
               continue;
             }
