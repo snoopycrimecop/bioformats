@@ -599,6 +599,7 @@ public class OIRReader extends FormatReader {
       for (int d=0; d<detectors.size(); d++) {
         if (detectors.get(d).channelId.equals(ch.id)) {
           store.setDetectorSettingsID(MetadataTools.createLSID("Detector", 0, d), 0, c);
+          break;
         }
       }
 
