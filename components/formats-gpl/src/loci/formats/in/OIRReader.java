@@ -533,6 +533,9 @@ public class OIRReader extends FormatReader {
       if (l.wavelength != null) {
         store.setLaserWavelength(FormatTools.getWavelength(l.wavelength, null), 0, i);
       }
+      if (l.transmissivity != null) {
+        store.setLaserPower(FormatTools.createPower(l.transmissivity, UNITS.MILLIWATT), 0, i);
+      }
     }
 
     for (int i=0; i<detectors.size(); i++) {
