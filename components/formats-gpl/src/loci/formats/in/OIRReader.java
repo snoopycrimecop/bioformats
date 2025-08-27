@@ -670,7 +670,7 @@ public class OIRReader extends FormatReader {
     readXMLBlock(file, s);
 
     while (s.getFilePointer() < s.length() - 16) {
-      s.findString("<?xml");
+      findNextXMLBlock(s);
       s.seek(s.getFilePointer() - 9);
       int length = s.readInt();
       if (length <= 0 || length + s.getFilePointer() > s.length()) {
@@ -692,6 +692,12 @@ public class OIRReader extends FormatReader {
       if (expectPixelBlock) {
         while (skipPixelBlock(file, s, true));
       }
+    }
+  }
+
+  private void findNextXMLBlock(RandomAccessInputStream s) throws IOException {
+    while (s.getFilePointer() + 5 < s.length() && !s.readString(5).equals("<?xml")) {
+      s.seek(s.getFilePointer() - 4);
     }
   }
 
