@@ -1231,9 +1231,14 @@ public class MetamorphReader extends BaseTiffReader {
         }
 
         if (perSeriesStageX != null && i < perSeriesStageX.length &&
-          perSeriesStageX[i] != null && p < perSeriesStageX[i].length)
+          perSeriesStageX[i] != null && perSeriesStageX[i].length > 0)
         {
-          store.setPlanePositionX(perSeriesStageX[i][p], i, p);
+          if (p < perSeriesStageX[i].length) {
+            store.setPlanePositionX(perSeriesStageX[i][p], i, p);
+          }
+          else {
+            store.setPlanePositionX(perSeriesStageX[i][0], i, p);
+          }
         }
         else if (stageX != null && p < stageX.length) {
           store.setPlanePositionX(stageX[p], i, p);
@@ -1243,9 +1248,14 @@ public class MetamorphReader extends BaseTiffReader {
         }
 
         if (perSeriesStageY != null && i < perSeriesStageY.length &&
-          perSeriesStageY[i] != null && p < perSeriesStageY[i].length)
+          perSeriesStageY[i] != null && perSeriesStageY[i].length > 0)
         {
-          store.setPlanePositionY(perSeriesStageY[i][p], i, p);
+          if (p < perSeriesStageY[i].length) {
+            store.setPlanePositionY(perSeriesStageY[i][p], i, p);
+          }
+          else {
+            store.setPlanePositionY(perSeriesStageY[i][0], i, p);
+          }
         }
         else if (stageY != null && p < stageY.length) {
           store.setPlanePositionY(stageY[p], i, p);
