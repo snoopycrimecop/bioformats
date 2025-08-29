@@ -794,8 +794,9 @@ public class MetamorphReader extends BaseTiffReader {
             stkReaders[i][j].setMetadataOptions(
               new DefaultMetadataOptions(MetadataLevel.MINIMUM));
           }
-          else {
+          else if (stks[i][j] != null) {
             try {
+              LOGGER.debug("reading positions from {}", stks[i][j]);
               stkReaders[i][j].setId(stks[i][j]);
               perSeriesStageX[i] = stkReaders[i][j].getStageX();
               perSeriesStageY[i] = stkReaders[i][j].getStageY();
@@ -1230,7 +1231,7 @@ public class MetamorphReader extends BaseTiffReader {
         }
 
         if (perSeriesStageX != null && i < perSeriesStageX.length &&
-          p < perSeriesStageX[i].length)
+          perSeriesStageX[i] != null && p < perSeriesStageX[i].length)
         {
           store.setPlanePositionX(perSeriesStageX[i][p], i, p);
         }
@@ -1242,7 +1243,7 @@ public class MetamorphReader extends BaseTiffReader {
         }
 
         if (perSeriesStageY != null && i < perSeriesStageY.length &&
-          p < perSeriesStageY[i].length)
+          perSeriesStageY[i] != null && p < perSeriesStageY[i].length)
         {
           store.setPlanePositionY(perSeriesStageY[i][p], i, p);
         }
