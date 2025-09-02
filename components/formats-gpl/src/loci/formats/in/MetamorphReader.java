@@ -462,8 +462,28 @@ public class MetamorphReader extends BaseTiffReader {
             if (charCount > matchingChars || (charCount == matchingChars &&
               f.charAt(charCount) == '.'))
             {
-              ndfile = new Location(parent, f).getAbsoluteFile();
               matchingChars = charCount;
+              // sometimes the .tif or .stk will have a similar name to an
+              // .nd file, but will have trailing characters that do not match
+              // the expected format for a dataset with an .nd file
+              // e.g. abc_overview.tif, abc.nd, abc_w1.stk, abc_w2.stk
+              // in the same directory
+              // if the name format is unexpected, don't pick up the .nd file,
+              // just treat this as a single-file dataset
+              String extra = stkName.substring(charCount).toLowerCase();
+              boolean valid = true;
+              for (int i=0; i<extra.length()-1; i++) {
+                if (extra.charAt(i) == '_') {
+                  char checkChar = extra.charAt(i + 1);
+                  if (checkChar != 'w' && checkChar != 't' && checkChar != 's') {
+                    valid = false;
+                    break;
+                  }
+                }
+              }
+              if (valid) {
+                ndfile = new Location(parent, f).getAbsoluteFile();
+              }
             }
           }
         }
