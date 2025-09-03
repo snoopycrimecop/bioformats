@@ -697,9 +697,9 @@ public class OIRReader extends FormatReader {
   }
 
   private void findNextXMLBlock(RandomAccessInputStream s) throws IOException {
-    while (s.getFilePointer() + 5 < s.length() && !s.readString(5).equals("<?xml")) {
-      s.seek(s.getFilePointer() - 4);
-    }
+    s.setEncoding("ascii");
+    s.findString("<?xml");
+    s.setEncoding(Constants.ENCODING);
   }
 
   private void readXMLBlock(String file, RandomAccessInputStream s) throws FormatException, IOException {
