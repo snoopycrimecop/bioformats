@@ -462,8 +462,28 @@ public class MetamorphReader extends BaseTiffReader {
             if (charCount > matchingChars || (charCount == matchingChars &&
               f.charAt(charCount) == '.'))
             {
-              ndfile = new Location(parent, f).getAbsoluteFile();
               matchingChars = charCount;
+              // sometimes the .tif or .stk will have a similar name to an
+              // .nd file, but will have trailing characters that do not match
+              // the expected format for a dataset with an .nd file
+              // e.g. abc_overview.tif, abc.nd, abc_w1.stk, abc_w2.stk
+              // in the same directory
+              // if the name format is unexpected, don't pick up the .nd file,
+              // just treat this as a single-file dataset
+              String extra = stkName.substring(charCount).toLowerCase();
+              boolean valid = true;
+              for (int i=0; i<extra.length()-1; i++) {
+                if (extra.charAt(i) == '_') {
+                  char checkChar = extra.charAt(i + 1);
+                  if (checkChar != 'w' && checkChar != 't' && checkChar != 's') {
+                    valid = false;
+                    break;
+                  }
+                }
+              }
+              if (valid) {
+                ndfile = new Location(parent, f).getAbsoluteFile();
+              }
             }
           }
         }
@@ -772,6 +792,9 @@ public class MetamorphReader extends BaseTiffReader {
       }
     }
 
+    Length[][] perSeriesStageX = null;
+    Length[][] perSeriesStageY = null;
+
     if (stks == null) {
       stkReaders = new MetamorphReader[1][1];
       stkReaders[0][0] = new MetamorphReader();
@@ -779,14 +802,28 @@ public class MetamorphReader extends BaseTiffReader {
     }
     else {
       stkReaders = new MetamorphReader[stks.length][];
+      perSeriesStageX = new Length[stks.length][];
+      perSeriesStageY = new Length[stks.length][];
       for (int i=0; i<stks.length; i++) {
         stkReaders[i] = new MetamorphReader[stks[i].length];
         for (int j=0; j<stkReaders[i].length; j++) {
           stkReaders[i][j] = new MetamorphReader();
           stkReaders[i][j].setCanLookForND(false);
+
           if (j > 0) {
             stkReaders[i][j].setMetadataOptions(
               new DefaultMetadataOptions(MetadataLevel.MINIMUM));
+          }
+          else if (stks[i][j] != null) {
+            try {
+              LOGGER.debug("reading positions from {}", stks[i][j]);
+              stkReaders[i][j].setId(stks[i][j]);
+              perSeriesStageX[i] = stkReaders[i][j].getStageX();
+              perSeriesStageY[i] = stkReaders[i][j].getStageY();
+            }
+            finally {
+              stkReaders[i][j].close();
+            }
           }
         }
       }
@@ -1213,13 +1250,34 @@ public class MetamorphReader extends BaseTiffReader {
           store.setPlaneExposureTime(new Time(expTime, UNITS.SECOND), i, p);
         }
 
-        if (stageX != null && p < stageX.length) {
+        if (perSeriesStageX != null && i < perSeriesStageX.length &&
+          perSeriesStageX[i] != null && perSeriesStageX[i].length > 0)
+        {
+          if (p < perSeriesStageX[i].length) {
+            store.setPlanePositionX(perSeriesStageX[i][p], i, p);
+          }
+          else {
+            store.setPlanePositionX(perSeriesStageX[i][0], i, p);
+          }
+        }
+        else if (stageX != null && p < stageX.length) {
           store.setPlanePositionX(stageX[p], i, p);
         }
         else if (positionX != null) {
           store.setPlanePositionX(positionX, i, p);
         }
-        if (stageY != null && p < stageY.length) {
+
+        if (perSeriesStageY != null && i < perSeriesStageY.length &&
+          perSeriesStageY[i] != null && perSeriesStageY[i].length > 0)
+        {
+          if (p < perSeriesStageY[i].length) {
+            store.setPlanePositionY(perSeriesStageY[i][p], i, p);
+          }
+          else {
+            store.setPlanePositionY(perSeriesStageY[i][0], i, p);
+          }
+        }
+        else if (stageY != null && p < stageY.length) {
           store.setPlanePositionY(stageY[p], i, p);
         }
         else if (positionY != null) {
@@ -1749,6 +1807,14 @@ public class MetamorphReader extends BaseTiffReader {
     in.seek(saveLoc);
 
     if (validZ) zStart = tempZ;
+  }
+
+  protected Length[] getStageX() {
+    return stageX;
+  }
+
+  protected Length[] getStageY() {
+    return stageY;
   }
 
   private void readStagePositions() throws IOException {
