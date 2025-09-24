@@ -341,6 +341,7 @@ public class ND2Reader extends SubResolutionFormatReader {
 
     }
     else {
+      scanlinePad = w%4;
       // plane is not compressed
       readPlane(in, x, y, w, h, scanlinePad, buf);
     }
