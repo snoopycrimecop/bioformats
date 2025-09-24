@@ -50,7 +50,6 @@ import loci.formats.MetadataTools;
 import loci.formats.meta.MetadataStore;
 import ome.xml.model.enums.Immersion;
 import ome.xml.model.primitives.Color;
-import ome.xml.model.primitives.PercentFraction;
 import ome.xml.model.primitives.Timestamp;
 import ome.units.UNITS;
 import ome.units.quantity.Length;
@@ -534,6 +533,9 @@ public class OIRReader extends FormatReader {
       if (l.wavelength != null) {
         store.setLaserWavelength(FormatTools.getWavelength(l.wavelength, null), 0, i);
       }
+      if (l.transmissivity != null) {
+        store.setLaserPower(FormatTools.createPower(l.transmissivity, UNITS.MILLIWATT), 0, i);
+      }
     }
 
     for (int i=0; i<detectors.size(); i++) {
@@ -604,19 +606,6 @@ public class OIRReader extends FormatReader {
       if (ch.laserIndex >= 0 && ch.laserIndex < lasers.size()) {
         String laserId = MetadataTools.createLSID("LightSource", 0, ch.laserIndex);
         store.setChannelLightSourceSettingsID(laserId, 0, c);
-
-        Laser laser = lasers.get(ch.laserIndex);
-        if (laser != null && laser.transmissivity != null) {
-          double attenuation = laser.transmissivity / 100.0;
-          if (attenuation - 0 > Constants.EPSILON && 1 - attenuation > Constants.EPSILON) {
-            store.setChannelLightSourceSettingsAttenuation(
-              new PercentFraction((float) attenuation), 0, c);
-          }
-          else {
-            LOGGER.warn("Could not store transmissivity '{}' as Attenuation",
-              laser.transmissivity);
-          }
-        }
       }
     }
 
