@@ -341,7 +341,8 @@ public class ND2Reader extends SubResolutionFormatReader {
 
     }
     else {
-      scanlinePad = w%4;
+      //The scanline pad is set at 4 byte boundaries described by the pixel size in bytes.
+      scanlinePad = ((bpp * w)%4) / bpp;
       // plane is not compressed
       readPlane(in, x, y, w, h, scanlinePad, buf);
     }
