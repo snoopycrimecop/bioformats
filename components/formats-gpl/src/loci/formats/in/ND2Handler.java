@@ -485,7 +485,7 @@ public class ND2Handler extends BaseHandler {
           bits++;
         }
         try {
-          if (ms0.pixelType == 0) {
+          if (ms0.pixelType == 0 && bits <= 16) {
             ms0.pixelType =
               FormatTools.pixelTypeFromBytes(bits / 8, false, false);
           }
