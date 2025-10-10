@@ -3477,8 +3477,9 @@ public class ZeissCZIReader extends FormatReader {
       Element regionsSetup = getFirstNode(acquisition, "RegionsSetup");
 
       if (regionsSetup != null) {
+        String activated = regionsSetup.getAttribute("IsActivated");
         Element sampleHolder = getFirstNode(regionsSetup, "SampleHolder");
-        if (sampleHolder != null) {
+        if (sampleHolder != null && !"false".equalsIgnoreCase(activated)) {
           Element template = getFirstNode(sampleHolder, "Template");
           if (template != null) {
             Element templateRows = getFirstNode(template, "ShapeRows");
