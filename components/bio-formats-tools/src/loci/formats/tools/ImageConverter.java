@@ -485,7 +485,7 @@ public final class ImageConverter {
     // TODO: there may be other options not compatible with -precompressed
     if (precompressed &&
       (width_crop > 0 || height_crop > 0 ||
-      pyramidResolutions > 1 ||
+      pyramidScale > 1 || pyramidResolutions > 1 ||
       fillColor != null ||
       autoscale
       ))
@@ -589,6 +589,19 @@ public final class ImageConverter {
     } else {
       width = Math.min(reader.getSizeX(), width_crop);
       height = Math.min(reader.getSizeY(), height_crop);
+    }
+
+    // want to generate a pyramid but no resolution count specified
+    // calculate based upon the scale and tile size
+    if (pyramidScale > 1 && pyramidResolutions == 1) {
+      pyramidResolutions = 0;
+      int checkWidth = width;
+      int checkHeight = height;
+      while (checkWidth > 0 && checkHeight > 0) {
+        pyramidResolutions++;
+        checkWidth /= pyramidScale;
+        checkHeight /= pyramidScale;
+      }
     }
 
     if (channel >= reader.getEffectiveSizeC()) {
