@@ -1063,7 +1063,8 @@ public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
         DicomTag sliceSpace = new DicomTag(SLICE_SPACING, DS);
         Length physicalZ = fixUnits(r.getPixelsPhysicalSizeZ(pyramid));
         if (physicalZ != null) {
-          sliceThickness.value = padString(String.valueOf(physicalZ.value(UNITS.MM)));
+          double pz = physicalZ.value(UNITS.MM).doubleValue();
+          sliceThickness.value = padString(formatFixedWidth(pz, 16));
         }
         else {
           // a value of 0 is not allowed, but we don't know the actual thickness or slice spacing
@@ -1076,9 +1077,11 @@ public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
         DicomTag pixelSpacing = new DicomTag(PIXEL_SPACING, DS);
         Length physicalX = fixUnits(r.getPixelsPhysicalSizeX(pyramid));
         Length physicalY = fixUnits(r.getPixelsPhysicalSizeY(pyramid));
-        String px = physicalX == null ? "1" : String.valueOf(physicalX.value(UNITS.MM));
-        String py = physicalY == null ? "1" : String.valueOf(physicalY.value(UNITS.MM));
-        pixelSpacing.value = padString(px + "\\" + py);
+        double px = physicalX == null ? 1.0 : physicalX.value(UNITS.MM).doubleValue();
+        double py = physicalY == null ? 1.0 : physicalY.value(UNITS.MM).doubleValue();
+
+        pixelSpacing.value =
+          padString(formatFixedWidth(px, 15) + "\\" + formatFixedWidth(py, 15));
         pixelMeasuresSequence.children.add(pixelSpacing);
 
         pixelMeasuresSequence.children.add(makeItemDelimitation());
@@ -1154,11 +1157,13 @@ public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
             plane.children.add(makeItem());
 
             DicomTag offsetX = new DicomTag(X_OFFSET_IN_SLIDE, DS);
-            offsetX.value = padString(physicalX == null ? "0" : padString(String.valueOf(physicalX.value(UNITS.MM).floatValue() * width)));
+            double ox = physicalX.value(UNITS.MM).floatValue() * width;
+            offsetX.value = padString(physicalX == null ? "0" : padString(formatFixedWidth(ox, 16)));
             plane.children.add(offsetX);
 
             DicomTag offsetY = new DicomTag(Y_OFFSET_IN_SLIDE, DS);
-            offsetY.value = padString(physicalY == null ? "0" : padString(String.valueOf(physicalY.value(UNITS.MM).floatValue() * height)));
+            double oy = physicalY.value(UNITS.MM).floatValue() * height;
+            offsetY.value = padString(physicalY == null ? "0" : padString(formatFixedWidth(oy, 16)));
             plane.children.add(offsetY);
 
             DicomTag positionZ = new DicomTag(Z_OFFSET_IN_SLIDE, DS);
@@ -2212,6 +2217,15 @@ public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
     if (validPixelCount == null) {
       validPixelCount = true;
     }
+  }
+
+  /**
+   * Format the given double as a string with no more than
+   * <code>width</code> characters.
+   */
+  private String formatFixedWidth(double v, int width) {
+    String formattedFloat = String.format("%." + (width - 1) + "f", v);
+    return String.format("%." + width + "s", formattedFloat);
   }
 
   protected Slf4JStopWatch stopWatch() {
