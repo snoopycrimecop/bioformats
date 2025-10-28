@@ -592,7 +592,9 @@ public final class ImageConverter {
     }
 
     // want to generate a pyramid but no resolution count specified
-    // calculate based upon the scale and tile size
+    // calculate based upon the scale and image size
+    // the tile size has not been yet been set on the writer,
+    // and the writer needs a MetadataRetrieve with resolutions populated first
     if (pyramidScale > 1 && pyramidResolutions == 1) {
       pyramidResolutions = 0;
       int checkWidth = width;
