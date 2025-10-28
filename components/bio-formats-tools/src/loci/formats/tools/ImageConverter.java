@@ -1227,6 +1227,12 @@ public final class ImageConverter {
       int height = meta.getPixelsSizeY(series).getValue();
       for (int i=1; i<pyramidResolutions; i++) {
         int scale = (int) Math.pow(pyramidScale, i);
+        if (width < scale || height < scale) {
+          LOGGER.warn("Specified pyramid resolutions {} too large; adjusted to {}",
+            pyramidResolutions, i);
+          pyramidResolutions = i;
+          break;
+        }
         ((OMEPyramidStore) meta).setResolutionSizeX(
           new PositiveInteger(width / scale), series, i);
         ((OMEPyramidStore) meta).setResolutionSizeY(
