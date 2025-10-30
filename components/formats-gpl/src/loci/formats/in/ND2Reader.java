@@ -1131,7 +1131,7 @@ public class ND2Reader extends SubResolutionFormatReader {
           in.skipBytes(skip);
         }
       }
-      
+
       if(currentCountSetted && imageMetadataLVOrder.length() > 0 && 
           (imageOffsets.size() == 0 || timeCount * zCount * XYCount == imageOffsets.size())) {
         setDimensions(timeCount, zCount, XYCount);
@@ -2803,6 +2803,7 @@ public class ND2Reader extends SubResolutionFormatReader {
       int tSize = ms0.sizeT;
       int c = ms0.sizeC;
       String order = ms0.dimensionOrder;
+      int type = ms0.pixelType;
       core = new CoreMetadataList();
       for (int i=0; i<numSeries; i++) {
         CoreMetadata ms = new CoreMetadata();
@@ -2813,6 +2814,7 @@ public class ND2Reader extends SubResolutionFormatReader {
         ms.sizeC = c == 0 ? 1 : c;
         ms.sizeT = tSize == 0 ? 1 : tSize;
         ms.dimensionOrder = order;
+        ms.pixelType = type;
       }
       ms0 = core.get(0, 0);
     }
