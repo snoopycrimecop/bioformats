@@ -983,13 +983,6 @@ public class CellSensReader extends FormatReader {
                   FormatTools.createTime(pyramid.tValues.get(reorderedPlane),
                   UNITS.MILLISECOND), ii, nextPlane);
               }
-              else if (pyramid.tStart != null && pyramid.tIncrement != null) {
-                store.setPlaneDeltaT(
-                  FormatTools.createTime(pyramid.tStart + (t * pyramid.tIncrement),
-                  UNITS.MILLISECOND), ii, nextPlane);
-              }
-              store.setPixelsTimeIncrement(
-                FormatTools.createTime(pyramid.tIncrement, UNITS.MILLISECOND), ii);
             }
           }
         }
@@ -1979,12 +1972,6 @@ public class CellSensReader extends FormatReader {
                 else if (tagPrefix.equals("Z value")) {
                   pyramid.zValues.add(DataTools.parseDouble(value));
                 }
-                else if (tagPrefix.equals("Timelapse start")) {
-                  pyramid.tStart = DataTools.parseDouble(value);
-                }
-                else if (tagPrefix.equals("Timelapse increment")) {
-                  pyramid.tIncrement = DataTools.parseDouble(value);
-                }
                 else if (tagPrefix.equals("Timestamp ")) {
                   pyramid.tValues.add(DataTools.parseDouble(value));
                 }
@@ -2699,8 +2686,6 @@ public class CellSensReader extends FormatReader {
     public transient Double zIncrement;
     public transient ArrayList<Double> zValues = new ArrayList<Double>();
 
-    public transient Double tStart;
-    public transient Double tIncrement;
     public transient ArrayList<Double> tValues = new ArrayList<Double>();
 
     public boolean   HasAssociatedEtsFile = false;
