@@ -497,6 +497,27 @@ public class ImageConverterTest {
     assertEquals(meta.getImageCount(), 1);
   }
 
+  /**
+   * Generate a pyramid, but calculate internally how many resolutions are needed
+   * based on specified tile size.
+   */
+  @Test
+  public void testGenerateCalculatedResolutionsByTileSize() throws FormatException, IOException {
+    outFile = getOutFile("tile-size-calculated-pyramid.ome.tiff");
+    String[] args = {
+      "calculated-pyramid&sizeX=7673&sizeY=1541.fake",
+      "-pyramid-scale", "2",
+      "-tilex", "512",
+      "-tiley", "512",
+      outFile.getAbsolutePath()
+    };
+    resolutionCount = 2;
+    assertConversion(args, outFile.getAbsolutePath(), 7673);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
   private Path getTempSubdir() throws IOException {
     Path subdir = Files.createTempDirectory(tempDir, "ImageConverterTest");
     subdir.toFile().deleteOnExit();

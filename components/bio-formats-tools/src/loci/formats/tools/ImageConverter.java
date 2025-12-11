@@ -599,7 +599,7 @@ public final class ImageConverter {
       pyramidResolutions = 0;
       int checkWidth = width;
       int checkHeight = height;
-      while (checkWidth > 0 && checkHeight > 0) {
+      while (checkWidth > saveTileWidth && checkHeight > saveTileHeight) {
         pyramidResolutions++;
         checkWidth /= pyramidScale;
         checkHeight /= pyramidScale;
