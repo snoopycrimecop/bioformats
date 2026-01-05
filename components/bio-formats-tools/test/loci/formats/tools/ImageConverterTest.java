@@ -490,7 +490,7 @@ public class ImageConverterTest {
       "-pyramid-scale", "2",
       outFile.getAbsolutePath()
     };
-    resolutionCount = 11;
+    resolutionCount = 10;
     assertConversion(args, outFile.getAbsolutePath(), 7673);
 
     IMetadata meta = getOMEXMLMetadata(outFile);
