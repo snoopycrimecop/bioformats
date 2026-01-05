@@ -599,7 +599,9 @@ public final class ImageConverter {
       pyramidResolutions = 0;
       int checkWidth = width;
       int checkHeight = height;
-      while (checkWidth > saveTileWidth && checkHeight > saveTileHeight) {
+      while (checkWidth >= (int) Math.max(saveTileWidth, pyramidScale) &&
+        checkHeight >= (int) Math.max(saveTileHeight, pyramidScale))
+      {
         pyramidResolutions++;
         checkWidth /= pyramidScale;
         checkHeight /= pyramidScale;
