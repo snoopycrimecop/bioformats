@@ -2402,9 +2402,14 @@ public class ND2Reader extends SubResolutionFormatReader {
             stampIndex = getIndex(coords[0], !split ? coords[1] : 0, 0);
           }
           stampIndex += (coords[2] * getSeriesCount() + i) * zcPlanes;
-          if (tsT.size() == getImageCount()) stampIndex = n;
+          if (tsT.size() == getImageCount()) {
+            stampIndex = n;
+          }
           else if (tsT.size() == getSizeZ()) {
             stampIndex = coords[0];
+          }
+          else if (tsT.size() == getSizeZ() * getSizeT()) {
+            stampIndex = n / getEffectiveSizeC();
           }
           if (stampIndex < tsT.size()) {
             double stamp = tsT.get(stampIndex).doubleValue();
