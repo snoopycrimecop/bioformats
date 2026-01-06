@@ -152,6 +152,9 @@ public enum IFDType implements CodedEnum {
     else if (value instanceof Double || value instanceof double[]) {
       return DOUBLE;
     }
+    else if (value instanceof Boolean) {
+      return UNDEFINED;
+    }
     throw new FormatException("Unknown IFD value type (" +
       value.getClass().getName() + "): " + value);
   }
