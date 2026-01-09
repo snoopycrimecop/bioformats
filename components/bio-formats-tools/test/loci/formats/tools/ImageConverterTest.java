@@ -421,6 +421,103 @@ public class ImageConverterTest {
     assertEquals(meta.getPixelsSizeT(0).getValue().intValue(), 1);
   }
 
+  /**
+   * Generate a pyramid with the defined number of resolutions.
+   */
+  @Test
+  public void testGenerateDefinedResolutions() throws FormatException, IOException {
+    outFile = getOutFile("defined-pyramid.ome.tiff");
+    String[] args = {
+      "defined-pyramid&sizeX=8100&sizeY=7500.fake",
+      "-pyramid-resolutions", "4",
+      "-pyramid-scale", "2",
+      outFile.getAbsolutePath()
+    };
+    resolutionCount = 4;
+    assertConversion(args, outFile.getAbsolutePath(), 8100);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
+  /**
+   * Generate a pyramid with downsample factor of 3.
+   */
+  @Test
+  public void testPyramidFactor3() throws FormatException, IOException {
+    outFile = getOutFile("factor-3.ome.tiff");
+    String[] args = {
+      "factor-3&sizeX=8100&sizeY=7500.fake",
+      "-pyramid-resolutions", "4",
+      "-pyramid-scale", "3",
+      outFile.getAbsolutePath()
+    };
+    resolutionCount = 4;
+    assertConversion(args, outFile.getAbsolutePath(), 8100);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
+  /**
+   * Generate a pyramid, where the defined number of resolutions is unreasonably large.
+   */
+  @Test
+  public void testGenerateTooManyResolutions() throws FormatException, IOException {
+    outFile = getOutFile("big-pyramid.ome.tiff");
+    String[] args = {
+      "big-pyramid&sizeX=6073&sizeY=9247.fake",
+      "-pyramid-resolutions", "20",
+      "-pyramid-scale", "2",
+      outFile.getAbsolutePath()
+    };
+    // 20 is too many, so the count should be reset
+    resolutionCount = 13;
+    assertConversion(args, outFile.getAbsolutePath(), 6073);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
+  /**
+   * Generate a pyramid, but calculate internally how many resolutions are needed.
+   */
+  @Test
+  public void testGenerateCalculatedResolutions() throws FormatException, IOException {
+    outFile = getOutFile("calculated-pyramid.ome.tiff");
+    String[] args = {
+      "calculated-pyramid&sizeX=7673&sizeY=1541.fake",
+      "-pyramid-scale", "2",
+      outFile.getAbsolutePath()
+    };
+    resolutionCount = 10;
+    assertConversion(args, outFile.getAbsolutePath(), 7673);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
+  /**
+   * Generate a pyramid, but calculate internally how many resolutions are needed
+   * based on specified tile size.
+   */
+  @Test
+  public void testGenerateCalculatedResolutionsByTileSize() throws FormatException, IOException {
+    outFile = getOutFile("tile-size-calculated-pyramid.ome.tiff");
+    String[] args = {
+      "calculated-pyramid&sizeX=7673&sizeY=1541.fake",
+      "-pyramid-scale", "2",
+      "-tilex", "512",
+      "-tiley", "512",
+      outFile.getAbsolutePath()
+    };
+    resolutionCount = 2;
+    assertConversion(args, outFile.getAbsolutePath(), 7673);
+
+    IMetadata meta = getOMEXMLMetadata(outFile);
+    assertEquals(meta.getImageCount(), 1);
+  }
+
   private Path getTempSubdir() throws IOException {
     Path subdir = Files.createTempDirectory(tempDir, "ImageConverterTest");
     subdir.toFile().deleteOnExit();
