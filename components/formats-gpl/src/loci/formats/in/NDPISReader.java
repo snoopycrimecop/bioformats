@@ -198,7 +198,7 @@ public class NDPISReader extends FormatReader {
       ms.imageCount = ms.sizeC * ms.sizeZ * ms.sizeT;
     }
 
-    MetadataTools.populatePixels(store, this);
+    MetadataTools.populatePixels(store, this, false, false);
 
     bandUsed = new int[ndpiFiles.length];
     IFD ifd;
