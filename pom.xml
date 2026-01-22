@@ -50,7 +50,7 @@
     <testng.version>6.8</testng.version>
     <ome-common.version>6.1.1</ome-common.version>
     <ome-model.group>org.openmicroscopy</ome-model.group>
-    <ome-model.version>6.5.2</ome-model.version>
+    <ome-model.version>6.5.3</ome-model.version>
     <ome-poi.version>5.3.11</ome-poi.version>
     <ome-mdbtools.version>5.3.4</ome-mdbtools.version>
     <ome-jai.version>0.1.5</ome-jai.version>
