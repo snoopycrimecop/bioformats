@@ -2040,6 +2040,12 @@ public class ZeissCZIReader extends FormatReader {
     if (maxPhase > Integer.MIN_VALUE && minPhase < Integer.MAX_VALUE) {
       phases = maxPhase - minPhase;
     }
+    if (maxRotation > Integer.MIN_VALUE && minRotation < Integer.MAX_VALUE) {
+      rotations = maxRotation - minRotation;
+    }
+    if (maxIllumination > Integer.MIN_VALUE && minIllumination < Integer.MAX_VALUE) {
+      illuminations = maxIllumination - minIllumination;
+    }
 
     if (xyOnly && trimDimensions()) {
       ms0.sizeX = maxX - minX;
