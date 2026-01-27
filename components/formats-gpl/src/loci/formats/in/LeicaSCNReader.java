@@ -501,7 +501,7 @@ public class LeicaSCNReader extends BaseTiffReader {
   /**
    * SAX handler for parsing XML in Leica SCN files.
    *
-   * @author Roger Leigh <r.leigh at dundee.ac.uk>
+   * @author Roger Leigh r.leigh at dundee.ac.uk
    */
   class LeicaSCNHandler extends DefaultHandler {
 

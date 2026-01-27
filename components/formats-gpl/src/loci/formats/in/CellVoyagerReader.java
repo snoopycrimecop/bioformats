@@ -103,7 +103,7 @@ import org.xml.sax.SAXException;
  * incapacitating this reader. Should it happen, mail the author to help them
  * update this reader.
  *
- * @author Jean-Yves Tinevez <jeanyves.tinevez@gmail.com> Oct-Nov 2013
+ * @author Jean-Yves Tinevez jeanyves.tinevez at gmail.com
  * @author Melissa Linkert
  */
 public class CellVoyagerReader extends FormatReader
