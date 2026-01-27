@@ -829,7 +829,7 @@ public class SVSReader extends BaseTiffReader {
    * Get the IFD corresponding to the given plane in the current series.
    * Initializes the underlying TiffParser if necessary.
    *
-   * @param plane index
+   * @param no index
    * @return corresponding IFD
    */
   protected IFD getIFD(int no) {
