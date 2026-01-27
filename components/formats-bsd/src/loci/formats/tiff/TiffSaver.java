@@ -775,7 +775,7 @@ public class TiffSaver implements Closeable {
    * data in place.
    *
    * @param raf the input stream representing the file to be edited
-   * @param ifd the index into the list of IFDs {@see TiffParser#getIFDOffsets()}
+   * @param ifd the index into the list of IFDs, see {@link TiffParser#getIFDOffsets()}
    * @param tag the tag code
    * @param value the new value for the tag
    */
