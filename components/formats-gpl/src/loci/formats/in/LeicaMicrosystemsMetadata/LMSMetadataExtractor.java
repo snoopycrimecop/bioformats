@@ -111,7 +111,7 @@ public class LMSMetadataExtractor {
 
   /**
    * Extracts information from element node and writes it to reader's {@link CoreMetadata} and {@link MetadataTempBuffer}
-   * @param img node with tag name "element" from Leica XML
+   * @param image node with tag name "element" from Leica XML
    * @param i image /core index
    * @throws FormatException
    */
@@ -1193,8 +1193,7 @@ public class LMSMetadataExtractor {
   
   /**
    * Translates the content of a timestamp node to double value
-   * @param imageNode timestamp node
-   * @param image image / core index
+   * @param timestamp timestamp node
    * @throws FormatException
    */
   private double translateSingleTimestamp(Element timestamp) {
