@@ -43,11 +43,10 @@ import java.io.InputStreamReader;
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import loci.common.Constants;
+import loci.common.xml.XMLTools;
 
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
@@ -82,14 +81,12 @@ public class XMLWindow extends JFrame {
     setDocument(null);
 
     // parse XML from string into DOM structure
-    DocumentBuilderFactory docFact = DocumentBuilderFactory.newInstance();
-    DocumentBuilder db = docFact.newDocumentBuilder();
-    ByteArrayInputStream is =
-      new ByteArrayInputStream(xml.getBytes(Constants.ENCODING));
-    Document doc = db.parse(is);
-    is.close();
-
-    setDocument(doc);
+    try (ByteArrayInputStream is =
+      new ByteArrayInputStream(xml.getBytes(Constants.ENCODING)))
+    {
+      Document doc = XMLTools.parseDOM(is);
+      setDocument(doc);
+    }
   }
 
   /** Displays XML from the given file. */
@@ -99,9 +96,7 @@ public class XMLWindow extends JFrame {
     setDocument(null);
 
     // parse XML from file into DOM structure
-    DocumentBuilderFactory docFact = DocumentBuilderFactory.newInstance();
-    DocumentBuilder db = docFact.newDocumentBuilder();
-    Document doc = db.parse(file);
+    Document doc = XMLTools.parseDOM(file);
 
     setDocument(doc);
   }

@@ -38,8 +38,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import loci.common.DataTools;
@@ -1127,20 +1125,14 @@ public class LIFReader extends FormatReader {
   private Element getMetadataRoot(String xml)
     throws FormatException, IOException
   {
-    ByteArrayInputStream s = null;
-    try {
-      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-      DocumentBuilder parser = factory.newDocumentBuilder();
-      s = new ByteArrayInputStream(xml.getBytes(ENCODING));
-      return parser.parse(s).getDocumentElement();
+    try (ByteArrayInputStream s = new ByteArrayInputStream(xml.getBytes(ENCODING))) {
+      return XMLTools.parseDOM(s).getDocumentElement();
     }
     catch (ParserConfigurationException e) {
       throw new FormatException(e);
     }
     catch (SAXException e) {
       throw new FormatException(e);
-    } finally {
-        if (s != null) s.close();
     }
   }
 
