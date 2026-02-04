@@ -35,7 +35,6 @@ package loci.formats.gui;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -81,12 +80,7 @@ public class XMLWindow extends JFrame {
     setDocument(null);
 
     // parse XML from string into DOM structure
-    try (ByteArrayInputStream is =
-      new ByteArrayInputStream(xml.getBytes(Constants.ENCODING)))
-    {
-      Document doc = XMLTools.parseDOM(is);
-      setDocument(doc);
-    }
+    setDocument(XMLTools.parseDOM(xml));
   }
 
   /** Displays XML from the given file. */
@@ -96,9 +90,7 @@ public class XMLWindow extends JFrame {
     setDocument(null);
 
     // parse XML from file into DOM structure
-    Document doc = XMLTools.parseDOM(file);
-
-    setDocument(doc);
+    setDocument(XMLTools.parseDOM(file));
   }
 
   /** Displays XML from the given document. */
