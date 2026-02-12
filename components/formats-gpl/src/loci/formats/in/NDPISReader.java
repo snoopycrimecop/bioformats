@@ -281,8 +281,7 @@ public class NDPISReader extends FormatReader {
 
   private boolean isPyramidResolution(int readerIndex, int coreIndex) {
     int pyramidHeight = ((NDPIReader) readers[readerIndex].getReader()).getPyramidHeight();
-    return (hasFlattenedResolutions() && coreIndex < pyramidHeight) ||
-      (!hasFlattenedResolutions() && coreIndex == 0);
+    return coreIndex < pyramidHeight;
   }
 
 }
