@@ -90,6 +90,7 @@ public class NDPISReader extends FormatReader {
   @Override
   public int getOptimalTileWidth() {
     FormatTools.assertId(currentId, true, 1);
+    readers[0].setCoreIndex(getCoreIndex());
     return readers[0].getOptimalTileWidth();
   }
 
@@ -97,6 +98,7 @@ public class NDPISReader extends FormatReader {
   @Override
   public int getOptimalTileHeight() {
     FormatTools.assertId(currentId, true, 1);
+    readers[0].setCoreIndex(getCoreIndex());
     return readers[0].getOptimalTileHeight();
   }
 
@@ -121,6 +123,7 @@ public class NDPISReader extends FormatReader {
       readers[channel].openBytes(plane, buf, x, y, w, h);
     }
     else {
+      readers[0].setCoreIndex(getCoreIndex());
       readers[0].openBytes(no, buf, x, y, w, h);
     }
 
