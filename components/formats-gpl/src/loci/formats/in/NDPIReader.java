@@ -801,6 +801,10 @@ public class NDPIReader extends BaseTiffReader {
 
   // -- Helper methods --
 
+  protected int getPyramidHeight() {
+    return pyramidHeight;
+  }
+
   private int getIFDIndex(int seriesIndex, int zIndex) {
     if (seriesIndex < pyramidHeight) {
       return zIndex * pyramidHeight + seriesIndex;
