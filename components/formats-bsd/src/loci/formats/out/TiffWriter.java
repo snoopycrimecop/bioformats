@@ -490,7 +490,7 @@ public class TiffWriter extends FormatWriter {
       // added when the tiles are actually written
       isBigTiff = (out.length() + tilePositionBytes +
         ifd.getByteCount(false) +
-        (width * height * c * bytesPerPixel) +
+        (calculatedTileWidth * calculatedTileLength * c * bytesPerPixel) +
         10 * TiffConstants.BYTES_PER_ENTRY + FormatTools.CREATOR.length()) >= 4294967296L;
       if (isBigTiff) {
         throw new FormatException("File is too large; call setBigTiff(true)");
