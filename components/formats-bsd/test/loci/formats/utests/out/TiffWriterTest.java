@@ -166,6 +166,7 @@ public class TiffWriterTest {
     writer.setBigTiff(true);
     writer.setId("test.tiff");
     writer.saveBytes(0, buf, ifd);
+    writer.saveBytes(1, buf, ifd);
   }
 
   @Test
