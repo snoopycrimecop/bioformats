@@ -309,6 +309,7 @@ public class CellSensReader extends FormatReader {
   private static final int CONTRAST_BRIGHTNESS = 10047;
   private static final int ACQUISITION_PROPERTIES = 10048;
   private static final int GRADIENT_LUT = 10065;
+  private static final int CALIBRATION = 20051;
 
   // Stack types
   private static final int DEFAULT_IMAGE = 0;
@@ -2099,6 +2100,8 @@ public class CellSensReader extends FormatReader {
         return "Objective Working Distance ";
       case TIME_VALUE:
         return "Timestamp ";
+      case CALIBRATION:
+        return "Calibration Function ";
     }
     LOGGER.debug("Unhandled volume {}", tag);
     return "";
