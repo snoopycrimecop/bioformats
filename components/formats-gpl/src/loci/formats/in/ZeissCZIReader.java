@@ -1912,6 +1912,13 @@ public class ZeissCZIReader extends FormatReader {
     int minY = Integer.MAX_VALUE;
     int maxY = Integer.MIN_VALUE;
 
+    int minPhase = Integer.MAX_VALUE;
+    int maxPhase = Integer.MIN_VALUE;
+    int minRotation = Integer.MAX_VALUE;
+    int maxRotation = Integer.MIN_VALUE;
+    int minIllumination = Integer.MAX_VALUE;
+    int maxIllumination = Integer.MIN_VALUE;
+
     int dimensionCount = 0;
     for (SubBlock plane : planes) {
       if (xyOnly && plane.coreIndex != coreIndex) {
@@ -1988,9 +1995,8 @@ public class ZeissCZIReader extends FormatReader {
     		    }
             break;
           case 'R':
-            if (dimension.start >= rotations) {
-              rotations = dimension.start + 1;
-            }
+            minRotation = (int) Math.min(minRotation, dimension.start);
+            maxRotation = (int) Math.max(maxRotation, dimension.start + dimension.size);
             break;
           case 'S':
             if (dimension.start < minPositions) {
@@ -2001,9 +2007,8 @@ public class ZeissCZIReader extends FormatReader {
             }
             break;
           case 'I':
-            if (dimension.start >= illuminations) {
-              illuminations = dimension.start + 1;
-            }
+            minIllumination = (int) Math.min(minIllumination, dimension.start);
+            maxIllumination = (int) Math.max(maxIllumination, dimension.start + dimension.size);
             break;
           case 'B':
             if (dimension.start >= acquisitions) {
@@ -2016,9 +2021,8 @@ public class ZeissCZIReader extends FormatReader {
             }
             break;
           case 'H':
-            if (dimension.start >= phases) {
-              phases = dimension.start + 1;
-            }
+            minPhase = (int) Math.min(minPhase, dimension.start);
+            maxPhase = (int) Math.max(maxPhase, dimension.start + dimension.size);
             break;
           case 'V':
             if (dimension.start >= angles) {
@@ -2032,6 +2036,15 @@ public class ZeissCZIReader extends FormatReader {
     }
     if (maxPositions > Integer.MIN_VALUE && minPositions < Integer.MAX_VALUE) {
       positions = maxPositions - minPositions + 1;
+    }
+    if (maxPhase > Integer.MIN_VALUE && minPhase < Integer.MAX_VALUE) {
+      phases = maxPhase - minPhase;
+    }
+    if (maxRotation > Integer.MIN_VALUE && minRotation < Integer.MAX_VALUE) {
+      rotations = maxRotation - minRotation;
+    }
+    if (maxIllumination > Integer.MIN_VALUE && minIllumination < Integer.MAX_VALUE) {
+      illuminations = maxIllumination - minIllumination;
     }
 
     if (xyOnly && trimDimensions()) {
@@ -2200,13 +2213,13 @@ public class ZeissCZIReader extends FormatReader {
           p / (getImageCount() * (getSeriesCount() / angles));
       }
 
-      if (rotations > 0) {
+      if (rotations > 1) {
         z = r * (getSizeZ() / rotations) + z;
       }
-      if (illuminations > 0) {
+      if (illuminations > 1) {
         c = i * (getSizeC() / illuminations) + c;
       }
-      if (phases > 0) {
+      if (phases > 1) {
         t = phase * (getSizeT() / phases) + t;
       }
 
