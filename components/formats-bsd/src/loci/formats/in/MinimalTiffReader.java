@@ -676,7 +676,7 @@ public class MinimalTiffReader extends SubResolutionFormatReader {
    * Sets the resolution level when we have JPEG 2000 compressed data.
    * @param ifd The active IFD that is being used in our current
    * <code>openBytes()</code> calling context. It will be the sub-resolution
-   * IFD if <code>currentSeries > 0</code>.
+   * IFD if {@literal currentSeries > 0}.
    */
   protected void setResolutionLevel(IFD ifd) {
     if (tiffParser == null) {

@@ -806,7 +806,7 @@ public class ND2Reader extends SubResolutionFormatReader {
               b.append("\n");
             }
             textStrings.add(b.toString());
-            validDimensions.add(blockCount > 2);
+            validDimensions.add(blockCount >= 2);
 
             // make sure the file pointer is at the end of the block
             in.seek(startFP + dataLength - 1);
@@ -1131,7 +1131,7 @@ public class ND2Reader extends SubResolutionFormatReader {
           in.skipBytes(skip);
         }
       }
-      
+
       if(currentCountSetted && imageMetadataLVOrder.length() > 0 && 
           (imageOffsets.size() == 0 || timeCount * zCount * XYCount == imageOffsets.size())) {
         setDimensions(timeCount, zCount, XYCount);
@@ -1454,6 +1454,10 @@ public class ND2Reader extends SubResolutionFormatReader {
             ms.imageCount = imageOffsets.size() / getSeriesCount();
             ms.sizeZ = ms.imageCount / ms.sizeT;
             ms.dimensionOrder = "CZT";
+          }
+          else if (imageOffsets.size() % ms.sizeZ == 0) {
+            ms.imageCount = imageOffsets.size() / getSeriesCount();
+            ms.sizeT = ms.imageCount / ms.sizeZ;
           }
           else {
             ms.imageCount = imageOffsets.size() / getSeriesCount();
@@ -2398,9 +2402,14 @@ public class ND2Reader extends SubResolutionFormatReader {
             stampIndex = getIndex(coords[0], !split ? coords[1] : 0, 0);
           }
           stampIndex += (coords[2] * getSeriesCount() + i) * zcPlanes;
-          if (tsT.size() == getImageCount()) stampIndex = n;
+          if (tsT.size() == getImageCount()) {
+            stampIndex = n;
+          }
           else if (tsT.size() == getSizeZ()) {
             stampIndex = coords[0];
+          }
+          else if (tsT.size() == getSizeZ() * getSizeT()) {
+            stampIndex = n / getEffectiveSizeC();
           }
           if (stampIndex < tsT.size()) {
             double stamp = tsT.get(stampIndex).doubleValue();
@@ -2684,6 +2693,12 @@ public class ND2Reader extends SubResolutionFormatReader {
           if (useDimensions) {
             handler.parseKeyAndValue(key, value, null);
           }
+          if (useDimensions && key.equalsIgnoreCase("number of picture planes")) {
+            int v = Integer.parseInt(value);
+            if (v < core.get(0, 0).sizeC) {
+              useDimensions = false;
+            }
+          }
 
           if (handler.isDimensions(key)) {
             textData = true;
@@ -2803,6 +2818,7 @@ public class ND2Reader extends SubResolutionFormatReader {
       int tSize = ms0.sizeT;
       int c = ms0.sizeC;
       String order = ms0.dimensionOrder;
+      int type = ms0.pixelType;
       core = new CoreMetadataList();
       for (int i=0; i<numSeries; i++) {
         CoreMetadata ms = new CoreMetadata();
@@ -2813,6 +2829,7 @@ public class ND2Reader extends SubResolutionFormatReader {
         ms.sizeC = c == 0 ? 1 : c;
         ms.sizeT = tSize == 0 ? 1 : tSize;
         ms.dimensionOrder = order;
+        ms.pixelType = type;
       }
       ms0 = core.get(0, 0);
     }
