@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.lang.reflect.Array;
 import java.rmi.dgc.VMID;
 import java.rmi.server.UID;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -2219,13 +2220,75 @@ public class DicomWriter extends FormatWriter implements IExtraMetadataWriter {
     }
   }
 
+  private static String getScientificNotationPattern(int intDigits, int signBytes, int width) {
+    int exponentDigits = String.valueOf(Math.abs(intDigits)).length();
+    int mantissaDigits = width - exponentDigits - signBytes - 2;
+    StringBuffer pattern = new StringBuffer(".");
+    for (int i=0; i<mantissaDigits; i++) {
+      pattern.append("#");
+    }
+    pattern.append("E");
+    for (int i=0; i<exponentDigits; i++) {
+      pattern.append("0");
+    }
+    return pattern.toString();
+  }
+
   /**
    * Format the given double as a string with no more than
    * <code>width</code> characters.
    */
-  private String formatFixedWidth(double v, int width) {
-    String formattedFloat = String.format("%." + (width - 1) + "f", v);
-    return String.format("%." + width + "s", formattedFloat);
+  public static String formatFixedWidth(double v, int width) {
+    // use a smaller value than usual to test double equivalency
+    double epsilon = Double.MIN_VALUE;
+    if (Double.isNaN(v)) {
+      return "NaN";
+    }
+    else if (Double.isInfinite(v)) {
+      if (width >= 9) {
+        return v < 0 ? "-Infinity" : "+Infinity";
+      }
+      return "";
+    }
+    else if (Math.abs(v - 0) < epsilon) {
+      return "0";
+    }
+    // get a decimal formatter for the current default locale
+    DecimalFormat formatter = new DecimalFormat();
+    formatter.setGroupingUsed(false);
+
+    int integerDigitsNeeded = (int) Math.log10(Math.abs(v)) + 1;
+    int signBytes = v < 0 ? 1 : 0;
+
+    if (integerDigitsNeeded + signBytes > width) {
+      String pattern = getScientificNotationPattern(integerDigitsNeeded, signBytes, width);
+      LOGGER.debug("float formatting pattern = {}", pattern);
+      formatter.applyPattern(pattern);
+    }
+    else {
+      if (Math.round(v) == 0) {
+        integerDigitsNeeded--;
+      }
+      int fractionDigits = width - signBytes - integerDigitsNeeded;
+      if (fractionDigits == 0 || fractionDigits == 1) {
+        formatter.setMaximumFractionDigits(0);
+      }
+      else if (fractionDigits > 1 && integerDigitsNeeded >= -4) {
+        formatter.setMaximumIntegerDigits(Math.max(0, integerDigitsNeeded));
+        if (integerDigitsNeeded >= 0) {
+          formatter.setMaximumFractionDigits(fractionDigits - 1);
+        }
+        else {
+          formatter.setMaximumFractionDigits(width - signBytes - 1);
+        }
+      }
+      else {
+        String pattern = getScientificNotationPattern(integerDigitsNeeded, signBytes, width - 1);
+        LOGGER.debug("float formatting pattern = {}", pattern);
+        formatter.applyPattern(pattern);
+      }
+    }
+    return formatter.format(v);
   }
 
   protected Slf4JStopWatch stopWatch() {

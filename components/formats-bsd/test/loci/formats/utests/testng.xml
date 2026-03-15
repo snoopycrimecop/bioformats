@@ -209,6 +209,7 @@
        <groups/>
       <classes>
         <class name="loci.formats.utests.dicom.ProvidedMetadataTest"/>
+        <class name="loci.formats.utests.dicom.FloatFormatTest"/>
       </classes>
     </test>
 </suite>
