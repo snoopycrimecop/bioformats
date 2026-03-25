@@ -610,8 +610,9 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       if (value == null) continue;
       value = value.trim();
 
-      if (name.equals("ImarisVersion")) {
+      if (name.equals("ImarisDataSet")) {
         pathPrefix = attr.substring(0, attr.lastIndexOf("/"));
+        LOGGER.debug("Set path prefix to {}", pathPrefix);
       }
       else if (name.equals("X") || (attr.startsWith(getPath("DataSet/ResolutionLevel_0")) && name.equals("ImageSizeX"))) {
         try {
