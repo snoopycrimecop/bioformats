@@ -289,8 +289,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     if (seriesCount > 1) {
       for (int i=1; i<seriesCount; i++) {
         CoreMetadata ms = new CoreMetadata();
-        String groupPath =
-          getPath("DataSet/ResolutionLevel_" + i + "/TimePoint_0/Channel_0");
+        String groupPath = getPlanePath(i, 0, 0);
         ms.sizeX =
           Integer.parseInt(netcdf.getAttributeValue(groupPath + "/ImageSizeX"));
         ms.sizeY =
@@ -319,13 +318,13 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     // read block sizes for caching
     blockSizeZPerResolution = new int[seriesCount];
     for (int res = 0; res < seriesCount; res++) {
-      String datasetPath = getPath("DataSet/ResolutionLevel_" + res + "/TimePoint_0/Channel_0/Data");
+      String datasetPath = getPlaneDataPath(res, 0, 0);
       Hashtable<String, Object> table = netcdf.getVariableAttributes(datasetPath);
       String chunkSizesString = (String) table.get("_ChunkSizes");
       String[] sizes = chunkSizesString.split(" ");
       blockSizeZPerResolution[res] = Integer.parseInt(sizes[0]);
     }
-    
+
     // determine pixel type - this isn't stored in the metadata, so we need
     // to check the pixels themselves
 
@@ -513,7 +512,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
         try {
           String path;
           for (int ch = 0; ch < getSizeC(); ch++) {
-            path = getPath("/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_" + zct[2] + "/Channel_" + ch + "/Data");
+            path = getPlaneDataPath(resolutionIndex, zct[2], ch);
             buffer[ch] = netcdf.getArray(path, idcs, dims);
           }
         }
@@ -571,14 +570,14 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       int[] dimensions = new int[] {1, height, width};
       int[] indices = new int[] {zct[0], y, x};
       try {
-        String path = getPath("/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_" + zct[2] + "/Channel_" + zct[1] + "/Data");
+        String path = getPlaneDataPath(resolutionIndex, zct[2], zct[1]);
         image = netcdf.getArray(path, indices, dimensions);
       }
       catch (ServiceException e) {
         throw new FormatException(e);
       }
     }
-    
+
     return image;
   }
 
@@ -590,7 +589,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     int[] dimensions = new int[] {1, 2, 2};
     int[] indices = new int[] {0, 0, 0};
     try {
-      String path = getPath("/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_0/Channel_0/Data");
+      String path = getPlaneDataPath(resolutionIndex, 0, 0);
       image = netcdf.getArray(path, indices, dimensions);
     }
     catch (ServiceException e) {
@@ -731,6 +730,14 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       }
       l.add(value);
     }
+  }
+
+  private String getPlanePath(int res, int t, int c) {
+    return getPath("DataSet/ResolutionLevel_" + res + "/TimePoint_" + t + "/Channel_" + c);
+  }
+
+  private String getPlaneDataPath(int res, int t, int c) {
+    return getPlanePath(res, t, c) + "/Data";
   }
 
   private String getPath(String path) {
