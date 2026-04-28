@@ -1862,6 +1862,37 @@ public class CellSensReader extends FormatReader {
                     pyramid.originY = doubleValues[1];
                   }
                 }
+                else if (tag == VALUE
+                  && "Calibration Function ".equals(tagPrefix)
+                  && realType == DOUBLE_2
+                  && nDoubleValues >= 4
+                  && (nDoubleValues % 2) == 0)
+                {
+                  // Tag 20051 (CALIBRATION) sub-volumes carry a piecewise-
+                  // linear lookup table mapping a raw axis (e.g. uint16
+                  // pixel value) to a calibrated axis (e.g. Z position in
+                  // micrometres for DSX EFI height maps, or intensity in
+                  // counts for deconvolved fluorescence images). The LUT
+                  // is stored as (raw, calibrated) DOUBLE_2 pairs and is
+                  // linear, so a single (slope, origin) suffices to
+                  // reconstruct the mapping. Surface those summary values
+                  // as named metadata so downstream tools can convert
+                  // pixel values to calibrated units without reparsing
+                  // the full table from a long string.
+                  int nPairs = nDoubleValues / 2;
+                  double rawFirst = doubleValues[0];
+                  double calFirst = doubleValues[1];
+                  double rawLast  = doubleValues[2 * (nPairs - 1)];
+                  double calLast  = doubleValues[2 * (nPairs - 1) + 1];
+                  double dRaw = rawLast - rawFirst;
+                  if (dRaw != 0) {
+                    double slope = (calLast - calFirst) / dRaw;
+                    addGlobalMeta("Calibration Function Slope", slope);
+                    addGlobalMeta("Calibration Function Origin", calFirst);
+                    addGlobalMeta("Calibration Function Final", calLast);
+                    addGlobalMeta("Calibration Function NPoints", nPairs);
+                  }
+                }
                 break;
               case RGB:
                 int red = vsi.read();
