@@ -522,6 +522,9 @@ public class ND2Handler extends BaseHandler {
         final Double number = DataTools.parseDouble(value);
         posZ.add(new Length(number, UNITS.MICROMETER));
       }
+      else if (qName.equals("dPosName") && value != null && !value.isEmpty()) {
+        posNames.add(value);
+      }
       else if (qName.startsWith("item_")) {
         int v = Integer.parseInt(qName.substring(qName.indexOf('_') + 1));
         if (v == numSeries) {

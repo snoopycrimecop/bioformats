@@ -2236,7 +2236,9 @@ public class ND2Reader extends SubResolutionFormatReader {
           objectiveModel = value.toString();
         }
         else if (name.equals("pPosName") || name.equals("sPosition") || name.equals("dPosName")) {
-          posNames.add(value.toString());
+          if (!value.toString().isEmpty()) {
+            posNames.add(value.toString());
+          }
         }
 
         if (type != 11 && type != 10 && type != 9) {    // if not level add global meta
