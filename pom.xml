@@ -279,7 +279,7 @@
             <use>false</use>
             <links>
               <!-- Java 8 -->
-              <link>http://docs.oracle.com/javase/8/docs/api/</link>
+              <link>http://docs.oracle.com/javase/11/docs/api/</link>
 
               <!-- ImageJ1 -->
               <link>http://jenkins.imagej.net/job/ImageJ1-javadoc/javadoc/</link>
