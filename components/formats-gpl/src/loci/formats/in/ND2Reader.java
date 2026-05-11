@@ -2269,10 +2269,14 @@ public class ND2Reader extends SubResolutionFormatReader {
       int nameWidth = String.valueOf(getSeriesCount()).length();
       for (int i=0; i<getSeriesCount(); i++) {
         String seriesSuffix = String.format("(series %0" + nameWidth + "d)", i + 1);
-        String suffix = (i < effectivePosNames.size() && !effectivePosNames.get(i).equals("")) ?
-          effectivePosNames.get(i) : seriesSuffix;
+        boolean hasPosName =
+          i < effectivePosNames.size() && !effectivePosNames.get(i).equals("");
+        String suffix = hasPosName ? effectivePosNames.get(i) : seriesSuffix;
         String name = filename + " " + suffix;
         store.setImageName(name.trim(), i);
+        if (hasPosName) {
+          store.setStageLabelName(effectivePosNames.get(i), i);
+        }
       }
     }
 
