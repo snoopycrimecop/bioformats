@@ -60,7 +60,7 @@
     <sqlite.version>3.49.1.0</sqlite.version>
 
     <!-- Maven plugin versions -->
-    <maven-javadoc-plugin.version>3.0.1</maven-javadoc-plugin.version>
+    <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
 
     <!-- NB: Avoid platform encoding warning when copying resources. -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -278,8 +278,8 @@
                  http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5101868 -->
             <use>false</use>
             <links>
-              <!-- Java 8 -->
-              <link>http://docs.oracle.com/javase/11/docs/api/</link>
+              <!-- Java 11 -->
+              <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
 
               <!-- ImageJ1 -->
               <link>http://jenkins.imagej.net/job/ImageJ1-javadoc/javadoc/</link>
