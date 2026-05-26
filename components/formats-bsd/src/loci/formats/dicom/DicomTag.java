@@ -350,7 +350,6 @@ public class DicomTag implements Comparable<DicomTag> {
         if (in.getFilePointer() + skipCount <= in.length()) {
           in.skipBytes(skipCount);
         }
-        location += elementLength;
         value = "";
       }
     }
