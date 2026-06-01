@@ -61,6 +61,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
 
   // -- Fields --
 
+  private String pathPrefix = "";
   private double pixelSizeX, pixelSizeY, pixelSizeZ;
   private double minX, minY, minZ, maxX, maxY, maxZ;
   private int seriesCount;
@@ -229,6 +230,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
   public void close(boolean fileOnly) throws IOException {
     super.close(fileOnly);
     if (!fileOnly) {
+      pathPrefix = "";
       seriesCount = 0;
       pixelSizeX = pixelSizeY = pixelSizeZ = 0;
       minX = minY = minZ = maxX = maxY = maxZ = 0;
@@ -287,8 +289,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     if (seriesCount > 1) {
       for (int i=1; i<seriesCount; i++) {
         CoreMetadata ms = new CoreMetadata();
-        String groupPath =
-          "DataSet/ResolutionLevel_" + i + "/TimePoint_0/Channel_0";
+        String groupPath = getPlanePath(i, 0, 0);
         ms.sizeX =
           Integer.parseInt(netcdf.getAttributeValue(groupPath + "/ImageSizeX"));
         ms.sizeY =
@@ -317,13 +318,13 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     // read block sizes for caching
     blockSizeZPerResolution = new int[seriesCount];
     for (int res = 0; res < seriesCount; res++) {
-      String datasetPath = "DataSet/ResolutionLevel_" + res + "/TimePoint_0/Channel_0/Data";
+      String datasetPath = getPlaneDataPath(res, 0, 0);
       Hashtable<String, Object> table = netcdf.getVariableAttributes(datasetPath);
       String chunkSizesString = (String) table.get("_ChunkSizes");
       String[] sizes = chunkSizesString.split(" ");
       blockSizeZPerResolution[res] = Integer.parseInt(sizes[0]);
     }
-    
+
     // determine pixel type - this isn't stored in the metadata, so we need
     // to check the pixels themselves
 
@@ -492,7 +493,8 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
 
     // cache dataset blocks to avoid multiple reads.
     // use caching for 3D datasets and only if the size of the required buffer is < maxBufferSize
-    if (getSizeZ() > 1 && getSizeX() * getSizeY() * blockSizeZPerResolution[resolutionIndex] * getSizeC() * FormatTools.getBytesPerPixel(getPixelType()) < maxBufferSize) {
+    long blockSize = (long) getSizeX() * getSizeY() * blockSizeZPerResolution[resolutionIndex] * getSizeC() * FormatTools.getBytesPerPixel(getPixelType());
+    if (getSizeZ() > 1 && blockSize < maxBufferSize) {
       // update buffer if needed
       if (zct[0] < lastMinZ || zct[0] > lastMaxZ || zct[2] != lastT || resolutionIndex != lastRes || buffer == null) {
         buffer = new Object[getSizeC()];
@@ -510,7 +512,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
         try {
           String path;
           for (int ch = 0; ch < getSizeC(); ch++) {
-            path = "/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_" + zct[2] + "/Channel_" + ch + "/Data";
+            path = getPlaneDataPath(resolutionIndex, zct[2], ch);
             buffer[ch] = netcdf.getArray(path, idcs, dims);
           }
         }
@@ -568,14 +570,14 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       int[] dimensions = new int[] {1, height, width};
       int[] indices = new int[] {zct[0], y, x};
       try {
-        String path = "/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_" + zct[2] + "/Channel_" + zct[1] + "/Data";
+        String path = getPlaneDataPath(resolutionIndex, zct[2], zct[1]);
         image = netcdf.getArray(path, indices, dimensions);
       }
       catch (ServiceException e) {
         throw new FormatException(e);
       }
     }
-    
+
     return image;
   }
 
@@ -587,7 +589,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
     int[] dimensions = new int[] {1, 2, 2};
     int[] indices = new int[] {0, 0, 0};
     try {
-      String path = "/DataSet/ResolutionLevel_" + resolutionIndex + "/TimePoint_0/Channel_0/Data";
+      String path = getPlaneDataPath(resolutionIndex, 0, 0);
       image = netcdf.getArray(path, indices, dimensions);
     }
     catch (ServiceException e) {
@@ -607,7 +609,11 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       if (value == null) continue;
       value = value.trim();
 
-      if (name.equals("X") || (attr.startsWith("DataSet/ResolutionLevel_0") && name.equals("ImageSizeX"))) {
+      if (name.equals("ImarisDataSet")) {
+        pathPrefix = attr.substring(0, attr.lastIndexOf("/"));
+        LOGGER.debug("Set path prefix to {}", pathPrefix);
+      }
+      else if (name.equals("X") || (attr.startsWith(getPath("DataSet/ResolutionLevel_0")) && name.equals("ImageSizeX"))) {
         try {
           ms0.sizeX = Integer.parseInt(value);
         }
@@ -615,7 +621,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
           LOGGER.trace("Failed to parse '" + name + "'", e);
         }
       }
-      else if (name.equals("Y") || (attr.startsWith("DataSet/ResolutionLevel_0") && name.equals("ImageSizeY"))) {
+      else if (name.equals("Y") || (attr.startsWith(getPath("DataSet/ResolutionLevel_0")) && name.equals("ImageSizeY"))) {
         try {
           ms0.sizeY = Integer.parseInt(value);
         }
@@ -623,7 +629,7 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
           LOGGER.trace("Failed to parse '" + name + "'", e);
         }
       }
-      else if (name.equals("Z") || (attr.startsWith("DataSet/ResolutionLevel_0") && name.equals("ImageSizeZ"))) {
+      else if (name.equals("Z") || (attr.startsWith(getPath("DataSet/ResolutionLevel_0")) && name.equals("ImageSizeZ"))) {
         try {
           ms0.sizeZ = Integer.parseInt(value);
         }
@@ -653,14 +659,16 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       else if (name.equals("ExtMin1")) minY = Double.parseDouble(value);
       else if (name.equals("ExtMin2")) minZ = Double.parseDouble(value);
 
-      if (attr.startsWith("DataSet/ResolutionLevel_")) {
-        int slash = attr.indexOf("/", 24);
-        int n = Integer.parseInt(attr.substring(24, slash == -1 ?
-          attr.length() : slash));
+      String resolutionCheck = getPath("DataSet/ResolutionLevel_");
+      if (attr.startsWith(resolutionCheck)) {
+        int slash = attr.indexOf("/", resolutionCheck.length());
+        String resIndex = attr.substring(resolutionCheck.length(),
+          slash == -1 ?  attr.length() : slash);
+        int n = Integer.parseInt(resIndex);
         if (n >= seriesCount) seriesCount = n + 1;
       }
 
-      if (attr.startsWith("DataSetInfo/Channel_")) {
+      if (attr.startsWith(getPath("DataSetInfo/Channel_"))) {
         String originalValue = value;
         for (String d : DELIMITERS) {
           if (value.indexOf(d) != -1) {
@@ -722,6 +730,21 @@ public class ImarisHDFReader extends SubResolutionFormatReader {
       }
       l.add(value);
     }
+  }
+
+  private String getPlanePath(int res, int t, int c) {
+    return getPath("DataSet/ResolutionLevel_" + res + "/TimePoint_" + t + "/Channel_" + c);
+  }
+
+  private String getPlaneDataPath(int res, int t, int c) {
+    return getPlanePath(res, t, c) + "/Data";
+  }
+
+  private String getPath(String path) {
+    if (pathPrefix.isEmpty()) {
+      return path;
+    }
+    return pathPrefix + "/" + path;
   }
 
 }
