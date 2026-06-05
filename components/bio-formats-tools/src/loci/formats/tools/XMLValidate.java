@@ -66,7 +66,13 @@ public class XMLValidate {
     } finally {
       in.close();
     }
-    return XMLTools.validateXML(sb.toString(), label, OMEXMLServiceImpl.SCHEMA_CLASSPATH_READER);
+    return validate(sb.toString(), label);
+  }
+
+  public static boolean validate(String xml, String label)
+    throws IOException
+  {
+    return XMLTools.validateXML(xml, label, OMEXMLServiceImpl.SCHEMA_CLASSPATH_READER);
   }
 
   @Deprecated
@@ -103,7 +109,7 @@ public class XMLValidate {
             try (RandomAccessInputStream stream = new RandomAccessInputStream(file)) {
               comment = new TiffParser(stream).getComment();
             }
-            results[i] = validate(new BufferedReader(new StringReader(comment)), file);
+            results[i] = validate(comment, file);
           } else {
             results[i] = validate(new BufferedReader(new InputStreamReader(
                       new FileInputStream(file), Constants.ENCODING)), file);
