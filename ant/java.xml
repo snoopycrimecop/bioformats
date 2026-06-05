@@ -272,7 +272,7 @@ your FindBugs installation's lib directory. E.g.:
       <fileset dir="${utils.dir}" includes="**/*.class"/>
     </delete>
     <javac debug="true" includeantruntime="false" fork="true"
-      deprecation="true" source="1.8" target="1.8"
+      deprecation="true" source="11" target="11"
       encoding="UTF-8"
       srcdir="${utils.dir}" includes="**/*.java"
       classpath="${artifact.dir}/${component.jar}">
@@ -293,7 +293,7 @@ your FindBugs installation's lib directory. E.g.:
       <classpath refid="runtime.classpath"/>
       <doctitle><![CDATA[<h1>Bio-Formats</h1>]]></doctitle>
       <bottom><![CDATA[${copyright.begin} ${YEAR} ${copyright.end}]]></bottom>
-      <link href="http://docs.oracle.com/javase/8/docs/api/"/>
+      <link href="https://docs.oracle.com/en/java/javase/11/docs/api/"/>
       <link href="https://imagej.net/developer/api/"
             offline="true" packagelistLoc="${root.dir}/ant/package-list"/>
     </javadoc>
