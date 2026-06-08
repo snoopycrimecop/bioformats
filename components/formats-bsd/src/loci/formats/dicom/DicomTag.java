@@ -497,8 +497,8 @@ public class DicomTag implements Comparable<DicomTag> {
         int n2 = DataTools.bytesToShort(b, 2, 2, !in.isLittleEndian());
         n1 &= 0xffff;
         n2 &= 0xffff;
-        if (n1 < 0 || n1 + in.getFilePointer() > in.length()) return n2;
-        if (n2 < 0 || n2 + in.getFilePointer() > in.length()) return n1;
+        if (n1 + in.getFilePointer() > in.length()) return n2;
+        if (n2 + in.getFilePointer() > in.length()) return n1;
         return n1;
       case RESERVED:
         int len = DataTools.bytesToInt(b, 0, 4, in.isLittleEndian());
