@@ -545,6 +545,9 @@ public class CellSensReader extends FormatReader {
       int outputRowLen = w * pixel;
 
       Pyramid pyramid = getCurrentPyramid();
+      if (pyramid.fillColor != null) {
+        Arrays.fill(buf, pyramid.fillColor);
+      }
 
       for (int row=0; row<tileRows; row++) {
         for (int col=0; col<tileCols; col++) {
@@ -1958,6 +1961,9 @@ public class CellSensReader extends FormatReader {
               else if (tag == BLUE_OFFSET) {
                 pyramid.blueOffset = DataTools.parseDouble(value);
               }
+              else if (tag == DEFAULT_BACKGROUND_COLOR) {
+                pyramid.fillColor = Byte.parseByte(value);
+              }
               else if (tag == VALUE) {
                 if (tagPrefix.equals("Channel Wavelength ")) {
                   pyramid.channelWavelengths.add(DataTools.parseDouble(value));
@@ -2665,6 +2671,7 @@ public class CellSensReader extends FormatReader {
     public Double redOffset;
     public Double greenOffset;
     public Double blueOffset;
+    public Byte fillColor;
 
     public ArrayList<String> channelNames = new ArrayList<String>();
     public ArrayList<Double> channelWavelengths = new ArrayList<Double>();
