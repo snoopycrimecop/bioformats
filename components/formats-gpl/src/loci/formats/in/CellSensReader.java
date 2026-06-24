@@ -529,6 +529,7 @@ public class CellSensReader extends FormatReader {
     throws FormatException, IOException
   {
     FormatTools.checkPlaneParameters(this, no, buf.length, x, y, w, h);
+    Arrays.fill(buf, getFillColor());
 
     if (getCoreIndex() < core.size() - 1 && getCoreIndex() < rows.size()) {
       int tileRows = rows.get(getCoreIndex());
