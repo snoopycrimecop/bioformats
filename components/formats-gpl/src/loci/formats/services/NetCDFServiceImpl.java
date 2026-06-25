@@ -47,7 +47,6 @@ import ucar.nc2.Group;
 import ucar.nc2.NetcdfFile;
 import ucar.nc2.NetcdfFiles;
 import ucar.nc2.Variable;
-import ucar.unidata.io.RandomAccessFile;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -80,8 +79,6 @@ public class NetCDFServiceImpl extends AbstractService
 
   /** NetCDF file instance. */
   private NetcdfFile netCDFFile;
-
-  private RandomAccessFile raf;
 
   /** Root of the NetCDF file. */
   private Group root;
@@ -222,14 +219,10 @@ public class NetCDFServiceImpl extends AbstractService
   @Override
   public void close() throws IOException {
     if (netCDFFile != null) netCDFFile.close();
-    if (raf != null) {
-      raf.close();
-    }
     currentFile = null;
     attributeList = null;
     variableList = null;
     netCDFFile = null;
-    raf = null;
     root = null;
   }
 
@@ -315,9 +308,7 @@ public class NetCDFServiceImpl extends AbstractService
     };
     System.setOut(throwaway);
     throwaway.close();
-
-    raf = RandomAccessFile.acquire(currentId);
-    netCDFFile = NetcdfFiles.open(raf, currentId, null, null);
+    netCDFFile = NetcdfFiles.open(currentId);
     System.setOut(outStream);
     root = netCDFFile.getRootGroup();
   }
