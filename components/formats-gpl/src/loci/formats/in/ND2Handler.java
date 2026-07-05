@@ -513,17 +513,17 @@ public class ND2Handler extends BaseHandler {
       else if ("dPosX".equals(prevElement) && qName.startsWith("item_")) {
         final Double number = DataTools.parseDouble(value);
         posX.add(new Length(number, UNITS.MICROMETER));
-        metadata.put("X position for position #" + posX.size(), value);
       }
       else if ("dPosY".equals(prevElement) && qName.startsWith("item_")) {
         final Double number = DataTools.parseDouble(value);
         posY.add(new Length(number, UNITS.MICROMETER));
-        metadata.put("Y position for position #" + posY.size(), value);
       }
       else if ("dPosZ".equals(prevElement) && qName.startsWith("item_")) {
         final Double number = DataTools.parseDouble(value);
         posZ.add(new Length(number, UNITS.MICROMETER));
-        metadata.put("Z position for position #" + posZ.size(), value);
+      }
+      else if (qName.equals("dPosName") && value != null && !value.isEmpty()) {
+        posNames.add(value);
       }
       else if (qName.startsWith("item_")) {
         int v = Integer.parseInt(qName.substring(qName.indexOf('_') + 1));

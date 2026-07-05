@@ -113,6 +113,7 @@ public class ND2Reader extends SubResolutionFormatReader {
   private ArrayList<Length> posX;
   private ArrayList<Length> posY;
   private ArrayList<Length> posZ;
+  private ArrayList<String> posNames = new ArrayList<String>();
   private ArrayList<Double> exposureTime = new ArrayList<Double>();
 
   private Map<String, Integer> channelColors;
@@ -380,6 +381,7 @@ public class ND2Reader extends SubResolutionFormatReader {
       objectiveMag = null;
       objectiveModel = null;
       exposureTime.clear();
+      posNames.clear();
       positionCount = 0;
     }
   }
@@ -2233,6 +2235,11 @@ public class ND2Reader extends SubResolutionFormatReader {
         else if (name.equals("sObjective")) {
           objectiveModel = value.toString();
         }
+        else if (name.equals("pPosName") || name.equals("sPosition") || name.equals("dPosName")) {
+          if (!value.toString().isEmpty()) {
+            posNames.add(value.toString());
+          }
+        }
 
         if (type != 11 && type != 10 && type != 9) {    // if not level add global meta
           addGlobalMeta(name, value);
@@ -2257,14 +2264,19 @@ public class ND2Reader extends SubResolutionFormatReader {
 
     String filename = new Location(getCurrentFile()).getName();
     if (handler != null) {
-      ArrayList<String> posNames = handler.getPositionNames();
+      ArrayList<String> handlerPosNames = handler.getPositionNames();
+      ArrayList<String> effectivePosNames = handlerPosNames.size() > 0 ? handlerPosNames : this.posNames;
       int nameWidth = String.valueOf(getSeriesCount()).length();
       for (int i=0; i<getSeriesCount(); i++) {
         String seriesSuffix = String.format("(series %0" + nameWidth + "d)", i + 1);
-        String suffix = (i < posNames.size() && !posNames.get(i).equals("")) ?
-          posNames.get(i) : seriesSuffix;
+        boolean hasPosName =
+          i < effectivePosNames.size() && !effectivePosNames.get(i).equals("");
+        String suffix = hasPosName ? effectivePosNames.get(i) : seriesSuffix;
         String name = filename + " " + suffix;
         store.setImageName(name.trim(), i);
+        if (hasPosName) {
+          store.setStageLabelName(effectivePosNames.get(i), i);
+        }
       }
     }
 
@@ -2393,8 +2405,8 @@ public class ND2Reader extends SubResolutionFormatReader {
     }
     int zcPlanes = getImageCount() / ((split ? getSizeC() : 1) * getSizeT());
     for (int i=0; i<getSeriesCount(); i++) {
+      setSeries(i);
       if (tsT.size() > 0) {
-        setSeries(i);
         for (int n=0; n<getImageCount(); n++) {
           int[] coords = getZCTCoords(n);
           int stampIndex = coords[0];
@@ -2435,6 +2447,14 @@ public class ND2Reader extends SubResolutionFormatReader {
         if (posX == null) posX = handler.getXPositions();
         if (posY == null) posY = handler.getYPositions();
         if (posZ == null) posZ = handler.getZPositions();
+        ArrayList<String> handlerPosNames = handler.getPositionNames();
+        ArrayList<String> seriesPosNames = handlerPosNames.size() > 0 ? handlerPosNames : this.posNames;
+        if (i < seriesPosNames.size() && !seriesPosNames.get(i).equals("")) {
+          addSeriesMeta("Position name", seriesPosNames.get(i));
+        }
+      }
+      else if (i < this.posNames.size() && !this.posNames.get(i).equals("")) {
+        addSeriesMeta("Position name", this.posNames.get(i));
       }
 
       String pos = "for position";
