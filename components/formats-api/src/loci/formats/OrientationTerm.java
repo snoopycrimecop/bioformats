@@ -36,4 +36,7 @@ package loci.formats;
  * Common interface for orientation values.
  */
 public interface OrientationTerm {
+
+  /** @return the defined vocabulary term for the orientation */
+  String getDefinedTerm();
 }

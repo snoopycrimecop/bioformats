@@ -68,6 +68,7 @@ public enum AnatomicalOrientation implements OrientationTerm {
     definedTerm = term;
   }
 
+  @Override
   public String getDefinedTerm() {
     return definedTerm;
   }
