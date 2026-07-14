@@ -29,11 +29,15 @@ import java.io.IOException;
 
 import loci.common.Location;
 import loci.common.RandomAccessInputStream;
+import loci.formats.AnatomicalOrientation;
 import loci.formats.CoreMetadata;
 import loci.formats.FormatException;
 import loci.formats.FormatReader;
 import loci.formats.FormatTools;
+import loci.formats.IAxisOrientationReader;
 import loci.formats.MetadataTools;
+import loci.formats.Orientation;
+import loci.formats.OrientationType;
 import loci.formats.meta.MetadataStore;
 
 import ome.units.quantity.Length;
@@ -45,7 +49,7 @@ import ome.units.UNITS;
  *
  * @author Melissa Linkert melissa at glencoesoftware.com
  */
-public class AnalyzeReader extends FormatReader {
+public class AnalyzeReader extends FormatReader implements IAxisOrientationReader {
 
   // -- Constants --
 
@@ -61,6 +65,10 @@ public class AnalyzeReader extends FormatReader {
 
   private String pixelsFilename;
 
+  private Orientation xAxis;
+  private Orientation yAxis;
+  private Orientation zAxis;
+
   // -- Constructor --
 
   /** Constructs a new Analyze reader. */
@@ -69,6 +77,18 @@ public class AnalyzeReader extends FormatReader {
     domains = new String[] {FormatTools.MEDICAL_DOMAIN};
     hasCompanionFiles = true;
     datasetDescription = "One .img file and one similarly-named .hdr file";
+  }
+
+  // -- IAxisOrientationReader API methods --
+
+  @Override
+  public Orientation[] getAxisOrientations() {
+    FormatTools.assertId(currentId, true, 1);
+    Orientation[] axes = new Orientation[5];
+    axes[getDimensionOrder().indexOf("X")] = xAxis;
+    axes[getDimensionOrder().indexOf("Y")] = yAxis;
+    axes[getDimensionOrder().indexOf("Z")] = zAxis;
+    return axes;
   }
 
   // -- IFormatReader API methods --
@@ -158,6 +178,9 @@ public class AnalyzeReader extends FormatReader {
       pixelOffset = 0;
       pixelFile = null;
       pixelsFilename = null;
+      xAxis = null;
+      yAxis = null;
+      zAxis = null;
     }
   }
 
@@ -241,6 +264,7 @@ public class AnalyzeReader extends FormatReader {
       description = in.readString(80);
       String auxFile = in.readString(24);
       char orient = (char) in.readByte();
+
       String originator = in.readString(10);
       String generated = in.readString(10);
       String scannum = in.readString(10);
@@ -258,6 +282,51 @@ public class AnalyzeReader extends FormatReader {
       int omin = in.readInt();
       int smax = in.readInt();
       int smin = in.readInt();
+
+      // see page 4 of https://afni.nimh.nih.gov/pub/dist/doc/nifti/ANALYZE75.pdf
+      // further reference:
+      // http://www.grahamwideman.com/gw/brain/analyze/formatdoc.htm
+      // https://eeg.sourceforge.net/mri_orientation_notes.html
+      switch (orient) {
+        case '0':
+          // transverse unflipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
+          break;
+        case '1':
+          // coronal unflipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
+          break;
+        case '2':
+          // sagittal unflipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          break;
+        case '3':
+          // transverse flipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.ANTERIOR_TO_POSTERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
+          break;
+        case '4':
+          // coronal flipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.SUPERIOR_TO_INFERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
+          break;
+        case '5':
+          // sagittal flipped
+          xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
+          yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.SUPERIOR_TO_INFERIOR);
+          zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
+          break;
+        default:
+          LOGGER.warn("Could not determine orientation: {}", orient);
+      }
 
       addGlobalMeta("Database name", imageName);
       addGlobalMeta("Number of dimensions", ndims);
