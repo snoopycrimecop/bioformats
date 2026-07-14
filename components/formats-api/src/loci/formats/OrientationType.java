@@ -53,4 +53,13 @@ public enum OrientationType {
   public Class<? extends OrientationTerm> getOrientationTermClass() {
     return terms;
   }
+
+  public static OrientationType fromString(String type) {
+    for (OrientationType t : OrientationType.class.getEnumConstants()) {
+      if (t.getDefinedType().equals(type)) {
+        return t;
+      }
+    }
+    return null;
+  }
 }
