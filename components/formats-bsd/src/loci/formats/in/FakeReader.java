@@ -328,6 +328,9 @@ public class FakeReader extends FormatReader implements IAxisOrientationReader {
   @Override
   public Orientation[] getAxisOrientations() {
     FormatTools.assertId(currentId, true, 1);
+    if (orientations.size() == 0) {
+      return new Orientation[5];
+    }
     return orientations.toArray(new Orientation[orientations.size()]);
   }
 

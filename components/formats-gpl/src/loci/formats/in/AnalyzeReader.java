@@ -287,39 +287,40 @@ public class AnalyzeReader extends FormatReader implements IAxisOrientationReade
       // further reference:
       // http://www.grahamwideman.com/gw/brain/analyze/formatdoc.htm
       // https://eeg.sourceforge.net/mri_orientation_notes.html
+      String orientationDescription = String.valueOf(orient);
       switch (orient) {
-        case '0':
-          // transverse unflipped
+        case 0:
+          orientationDescription = "transverse unflipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
           break;
-        case '1':
-          // coronal unflipped
+        case 1:
+          orientationDescription = "coronal unflipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
           break;
-        case '2':
-          // sagittal unflipped
+        case 2:
+          orientationDescription = "sagittal unflipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
           break;
-        case '3':
-          // transverse flipped
+        case 3:
+          orientationDescription = "transverse flipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.ANTERIOR_TO_POSTERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.INFERIOR_TO_SUPERIOR);
           break;
-        case '4':
-          // coronal flipped
+        case 4:
+          orientationDescription = "coronal flipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.SUPERIOR_TO_INFERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
           break;
-        case '5':
-          // sagittal flipped
+        case 5:
+          orientationDescription = "sagittal flipped";
           xAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.POSTERIOR_TO_ANTERIOR);
           yAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.SUPERIOR_TO_INFERIOR);
           zAxis = new Orientation(OrientationType.ANATOMICAL, AnatomicalOrientation.RIGHT_TO_LEFT);
@@ -345,7 +346,7 @@ public class AnalyzeReader extends FormatReader implements IAxisOrientationReade
       addGlobalMeta("Pixel minimum", pixelMin);
       addGlobalMeta("Description", description);
       addGlobalMeta("Auxiliary file", auxFile);
-      addGlobalMeta("Orientation", orient);
+      addGlobalMeta("Orientation", orientationDescription);
       addGlobalMeta("Originator", originator);
       addGlobalMeta("Generated", generated);
       addGlobalMeta("Scan Number", scannum);

@@ -497,10 +497,10 @@ public class BrukerReader extends FormatReader implements IAxisOrientationReader
           subjectType = value;
         }
         else if (key.equals("##$SUBJECT_entry")) {
-          subjectEntry = value.substring(value.indexOf("_") + 1);
+          subjectEntry = value.substring(value.lastIndexOf("_") + 1);
         }
-        else if (key.equals("##$SUBJECT_pose")) {
-          subjectPose = value.substring(value.indexOf("_") + 1);
+        else if (key.equals("##$SUBJECT_position")) {
+          subjectPose = value.substring(value.lastIndexOf("_") + 1);
         }
 
         if (ms != null) {
