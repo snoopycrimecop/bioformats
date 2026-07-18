@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.Hashtable;
 
 import loci.common.ByteArrayHandle;
+import loci.common.Constants;
 import loci.common.DataTools;
 import loci.common.DateTools;
 import loci.common.Location;
@@ -1885,7 +1886,7 @@ public class CellSensReader extends FormatReader {
                   double rawLast  = doubleValues[2 * (nPairs - 1)];
                   double calLast  = doubleValues[2 * (nPairs - 1) + 1];
                   double dRaw = rawLast - rawFirst;
-                  if (dRaw != 0) {
+                  if (Math.abs(dRaw) > Constants.EPSILON) {
                     double slope = (calLast - calFirst) / dRaw;
                     addGlobalMeta("Calibration Function Slope", slope);
                     addGlobalMeta("Calibration Function Origin", calFirst);
