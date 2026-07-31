@@ -1036,9 +1036,7 @@ public class DicomReader extends SubResolutionFormatReader {
 
           if (zOffsets.containsKey(lastCoreIndex)) {
             for (Double z : info.zOffsets) {
-              if (!zOffsets.get(lastCoreIndex).contains(z)) {
-                zOffsets.get(lastCoreIndex).add(z);
-              }
+              addZOffset(lastCoreIndex, z);
             }
           }
           else {
@@ -1741,7 +1739,7 @@ public class DicomReader extends SubResolutionFormatReader {
   }
 
   private void calculateTilePlaneIndexes() {
-    List<Double> zs = zOffsets.get(getCoreIndex());
+    List<Double> zs = getZOffsets(getCoreIndex());
     List<DicomTile> tiles = getTiles(getCoreIndex());
     for (int t=0; t<tiles.size(); t++) {
       DicomTile tile = tiles.get(t);
@@ -2066,9 +2064,7 @@ public class DicomReader extends SubResolutionFormatReader {
         zOffsets.put(getCoreIndex(), new ArrayList<Double>());
       }
       Double z = currentTile.zOffset;
-      if (!zOffsets.get(getCoreIndex()).contains(z)) {
-        zOffsets.get(getCoreIndex()).add(z);
-      }
+      addZOffset(getCoreIndex(), z);
     }
   }
 
@@ -2132,6 +2128,12 @@ public class DicomReader extends SubResolutionFormatReader {
       return tilePositions.get(coreIndex);
     }
     return new ArrayList<DicomTile>();
+  }
+
+  private void addZOffset(int coreIndex, Double z) {
+    if (!zOffsets.get(coreIndex).contains(z)) {
+      zOffsets.get(coreIndex).add(z);
+    }
   }
 
   public List<Double> getZOffsets() {
