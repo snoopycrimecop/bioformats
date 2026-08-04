@@ -874,14 +874,18 @@ public class OIRReader extends FormatReader {
       }
       if (depth != null) {
         int bytes = Integer.parseInt(depth.getTextContent());
-        if (rgb) {
+        // 'depth' is normally the total byte count across all components, but
+        // some RGB frames record the per-component count instead. A total
+        // across three components is always a multiple of three, so only
+        // divide when it divides evenly.
+        if (rgb && bytes % 3 == 0) {
           bytes /= 3;
         }
         m.pixelType = FormatTools.pixelTypeFromBytes(bytes, false, false);
       }
       if (bitCount != null) {
         m.bitsPerPixel = Integer.parseInt(bitCount.getTextContent());
-        if (rgb) {
+        if (rgb && m.bitsPerPixel % 3 == 0) {
           m.bitsPerPixel /= 3;
         }
       }
@@ -1000,14 +1004,15 @@ public class OIRReader extends FormatReader {
 
           if (depth != null) {
             int bytes = Integer.parseInt(depth.getTextContent());
-            if (rgb) {
+            // see the equivalent block in parseFrameProperties
+            if (rgb && bytes % 3 == 0) {
               bytes /= 3;
             }
             m.pixelType = FormatTools.pixelTypeFromBytes(bytes, false, false);
           }
           if (bitCount != null) {
             m.bitsPerPixel = Integer.parseInt(bitCount.getTextContent());
-            if (rgb) {
+            if (rgb && m.bitsPerPixel % 3 == 0) {
               m.bitsPerPixel /= 3;
             }
           }
