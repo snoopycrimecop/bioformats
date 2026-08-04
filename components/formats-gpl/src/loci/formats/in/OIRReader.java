@@ -951,7 +951,13 @@ public class OIRReader extends FormatReader {
         Element channelNode = (Element) channelNodes.item(i);
 
         c.id = channelNode.getAttribute("id");
-        int index = Integer.parseInt(channelNode.getAttribute("order")) - 1;
+        // LEXT (OLS) variants omit the 'order' attribute on the channel
+        // elements under commonimage:imageInfo; fall back to document order.
+        String order = channelNode.getAttribute("order");
+        int index = i;
+        if (order != null && !order.trim().isEmpty()) {
+          index = Integer.parseInt(order.trim()) - 1;
+        }
 
         Element name = getFirstChild(channelNode, "commonphase:name");
         if (name != null) {
