@@ -547,7 +547,9 @@ public class CellSensReader extends FormatReader {
       int pyramidIndex = getCurrentPyramidIndex();
       Pyramid pyramid = getCurrentPyramid();
       byte[] background = backgroundColor.get(pyramidIndex);
-      if (background != null && background.length > 0) {
+      LOGGER.trace("pyramid fill color = {}", pyramid.fillColor);
+      if (background != null && background.length > 0 && background[0] != (byte) 0xff) {
+        LOGGER.trace("background color = {}", background[0]);
         Arrays.fill(buf, background[0]);
       }
       else if (pyramid.fillColor != null) {
