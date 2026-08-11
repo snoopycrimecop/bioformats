@@ -773,7 +773,7 @@ public class TiffParser implements Closeable {
       countIndex = 0;
     }
     if (stripByteCounts[countIndex] == (rowsPerStrip[0] * tileWidth) &&
-      pixel > 1)
+      pixel > 1 && compression == TiffCompression.UNCOMPRESSED)
     {
       stripByteCounts[countIndex] *= pixel;
     }
