@@ -530,6 +530,7 @@ public class CellSensReader extends FormatReader {
     throws FormatException, IOException
   {
     FormatTools.checkPlaneParameters(this, no, buf.length, x, y, w, h);
+    Arrays.fill(buf, getFillColor());
 
     if (getCoreIndex() < core.size() - 1 && getCoreIndex() < rows.size()) {
       int tileRows = rows.get(getCoreIndex());
@@ -544,7 +545,17 @@ public class CellSensReader extends FormatReader {
       int pixel = getRGBChannelCount() * bpp;
       int outputRowLen = w * pixel;
 
+      int pyramidIndex = getCurrentPyramidIndex();
       Pyramid pyramid = getCurrentPyramid();
+      byte[] background = backgroundColor.get(pyramidIndex);
+      LOGGER.trace("pyramid fill color = {}", pyramid.fillColor);
+      if (background != null && background.length > 0 && background[0] != (byte) 0xff) {
+        LOGGER.trace("background color = {}", background[0]);
+        Arrays.fill(buf, background[0]);
+      }
+      else if (pyramid.fillColor != null) {
+        Arrays.fill(buf, pyramid.fillColor);
+      }
 
       for (int row=0; row<tileRows; row++) {
         for (int col=0; col<tileCols; col++) {
@@ -1989,6 +2000,9 @@ public class CellSensReader extends FormatReader {
               else if (tag == BLUE_OFFSET) {
                 pyramid.blueOffset = DataTools.parseDouble(value);
               }
+              else if (tag == DEFAULT_BACKGROUND_COLOR) {
+                pyramid.fillColor = Byte.parseByte(value);
+              }
               else if (tag == VALUE) {
                 if (tagPrefix.equals("Channel Wavelength ")) {
                   pyramid.channelWavelengths.add(DataTools.parseDouble(value));
@@ -2696,6 +2710,7 @@ public class CellSensReader extends FormatReader {
     public Double redOffset;
     public Double greenOffset;
     public Double blueOffset;
+    public Byte fillColor;
 
     public ArrayList<String> channelNames = new ArrayList<String>();
     public ArrayList<Double> channelWavelengths = new ArrayList<Double>();
