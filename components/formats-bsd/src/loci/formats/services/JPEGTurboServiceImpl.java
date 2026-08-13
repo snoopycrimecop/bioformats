@@ -214,9 +214,14 @@ public class JPEGTurboServiceImpl implements JPEGTurboService {
       }
     }
 
+    LOGGER.info("restartInterval = {}", restartInterval);
+    LOGGER.info("mcuWidth = {}", mcuWidth);
+    LOGGER.info("mcuHeight = {}", mcuHeight);
+
     tileWidth = restartInterval * mcuWidth;
     if (tileWidth > Short.MAX_VALUE) {
       tileHeight = mcuHeight;
+      LOGGER.warn("tile width larger than Short.MAX_VALUE");
     }
     else {
       tileHeight = (int) Math.min(tileWidth, 512);
