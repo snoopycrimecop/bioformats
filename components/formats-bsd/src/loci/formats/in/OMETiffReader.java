@@ -113,12 +113,16 @@ public class OMETiffReader extends SubResolutionFormatReader {
 
   /** Constructs a new OME-TIFF reader. */
   public OMETiffReader() {
-    super("OME-TIFF", OME_TIFF_SUFFIXES);
+    this("OME-TIFF", OME_TIFF_SUFFIXES);
     suffixNecessary = false;
     suffixSufficient = false;
     domains = FormatTools.NON_GRAPHICS_DOMAINS;
     hasCompanionFiles = true;
     datasetDescription = "One or more .ome.tiff files";
+  }
+
+  public OMETiffReader(String name, String[] suffixes) {
+    super(name, suffixes);
   }
 
   // -- IFormatReader API methods --
@@ -774,7 +778,7 @@ public class OMETiffReader extends SubResolutionFormatReader {
       }
       meta.setRoot(root);
 
-      service.convertMetadata(meta, metadataStore);
+      convertMetadata(meta, metadataStore);
       MetadataTools.populatePixels(metadataStore, this);
 
       addSubResolutions();
@@ -782,7 +786,7 @@ public class OMETiffReader extends SubResolutionFormatReader {
       return;
     }
 
-    service.convertMetadata(meta, metadataStore);
+    convertMetadata(meta, metadataStore);
 
     // determine series count from Image and Pixels elements
     int seriesCount = meta.getImageCount();
@@ -1395,7 +1399,22 @@ public class OMETiffReader extends SubResolutionFormatReader {
     return getMetadataStore();
   }
 
+  public OMEXMLMetadata getStoredMetadata() {
+    return meta;
+  }
+
+  public OMEXMLService getService() throws FormatException {
+    if (service == null) {
+      setupService();
+    }
+    return service;
+  }
+
   // -- Helper methods --
+
+  protected void convertMetadata(OMEXMLMetadata meta, MetadataStore store) {
+    service.convertMetadata(meta, store);
+  }
 
   private String normalizeFilename(String dir, String name) {
      Location file = new Location(dir, name);
