@@ -103,8 +103,8 @@ public class OMETiffReader extends SubResolutionFormatReader {
   private int lastPlane = 0;
   private boolean hasSPW;
 
-  private OMEXMLService service;
-  private transient OMEXMLMetadata meta;
+  protected OMEXMLService service;
+  protected transient OMEXMLMetadata meta;
   private String metaFile;
 
   private String metadataFile;
@@ -114,15 +114,15 @@ public class OMETiffReader extends SubResolutionFormatReader {
   /** Constructs a new OME-TIFF reader. */
   public OMETiffReader() {
     this("OME-TIFF", OME_TIFF_SUFFIXES);
+  }
+
+  public OMETiffReader(String name, String[] suffixes) {
+    super(name, suffixes);
     suffixNecessary = false;
     suffixSufficient = false;
     domains = FormatTools.NON_GRAPHICS_DOMAINS;
     hasCompanionFiles = true;
     datasetDescription = "One or more .ome.tiff files";
-  }
-
-  public OMETiffReader(String name, String[] suffixes) {
-    super(name, suffixes);
   }
 
   // -- IFormatReader API methods --
@@ -814,7 +814,11 @@ public class OMETiffReader extends SubResolutionFormatReader {
         }
         else {
           filename = meta.getUUIDFileName(i, td);
-          if (!new Location(dir, filename).exists()) filename = null;
+          if (!new Location(dir, filename).exists()) {
+            LOGGER.error("Missing file {} for UUID {} (planes will be black)",
+              filename, uuid);
+            filename = null;
+          }
           if (filename == null) {
             if (uuid.equals(currentUUID) || currentUUID == null) {
               // UUID references this file
@@ -1348,9 +1352,9 @@ public class OMETiffReader extends SubResolutionFormatReader {
           metadataStore.setPlaneTheT(t, i, p);
         }
       }
-    }
-    for (int i=0; i<acquiredDates.length; i++) {
-      if (acquiredDates[i] != null) {
+      if (acquiredDates.length == meta.getImageCount() &&
+        acquiredDates[i] != null)
+      {
         metadataStore.setImageAcquisitionDate(
             new Timestamp(acquiredDates[i]), i);
       }
@@ -1399,17 +1403,6 @@ public class OMETiffReader extends SubResolutionFormatReader {
     return getMetadataStore();
   }
 
-  public OMEXMLMetadata getStoredMetadata() {
-    return meta;
-  }
-
-  public OMEXMLService getService() throws FormatException {
-    if (service == null) {
-      setupService();
-    }
-    return service;
-  }
-
   // -- Helper methods --
 
   protected void convertMetadata(OMEXMLMetadata meta, MetadataStore store) {
@@ -1439,7 +1432,7 @@ public class OMETiffReader extends SubResolutionFormatReader {
       int i = info[s][0].ifd;
       MinimalTiffReader r = (MinimalTiffReader) info[s][0].reader;
       if (r.getCurrentFile() == null) {
-        r.setId(info[s][0].id);
+        initializeReader(r, info[s][0].id);
       }
       r.lastPlane = i;
       IFDList ifdList = r.getIFDs();
