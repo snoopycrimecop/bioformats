@@ -103,10 +103,13 @@ public class OMETiffReader extends SubResolutionFormatReader {
   private int lastPlane = 0;
   private boolean hasSPW;
 
+  /** OMEXMLService that can be used to manipulate OME-XML. */
   protected OMEXMLService service;
-  protected transient OMEXMLMetadata meta;
-  private String metaFile;
 
+  /** Represents OME-XML stored in the current OME-TIFF file(s). */
+  protected transient OMEXMLMetadata meta;
+
+  private String metaFile;
   private String metadataFile;
 
   // -- Constructor --
@@ -1405,6 +1408,21 @@ public class OMETiffReader extends SubResolutionFormatReader {
 
   // -- Helper methods --
 
+  /**
+   * Convert metadata contained within an OMEXMLMetadata object to a separate
+   * MetadataStore. The OMEXMLMetadata object is expected to represent the original
+   * OME-XML stored in this OME-TIFF. The MetadataStore is expected to represent
+   * the output metadata; if the MetadataStore is of type OMEXMLMetadata, the output
+   * is expected to be valid OME-XML.
+   *
+   * By default, this simply copies everything from the source OMEXMLMetadata
+   * to the destination MetadataStore without modification. Classes that extend
+   * OMETiffReader may wish to override this method if the OME-XML stored in
+   * the OME-TIFF is expected to be invalid or incorrect.
+   *
+   * @param meta source representing stored OME-XML
+   * @param store destination representing valid OME metadata
+   */
   protected void convertMetadata(OMEXMLMetadata meta, MetadataStore store) {
     service.convertMetadata(meta, store);
   }
